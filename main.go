@@ -17,6 +17,8 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/PlakarKorp/kloset/caching"
 	"github.com/PlakarKorp/kloset/caching/pebble"
@@ -81,20 +83,13 @@ func run() int {
 	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
 	defer ctx.GetCache().Close()
 
-	// kloset publishes progress onto the context's event bus during backup/check
-	// (the fs importer, for one, blocks sending scan events once the buffer
-	// fills). Nothing here renders them, but they must be drained or the
-	// operation deadlocks. Consume and discard for the lifetime of the run.
-	events := ctx.Events()
-	eventsDone := make(chan struct{})
-	go func() {
-		for range events.Listen() {
-		}
-		close(eventsDone)
-	}()
-
 	enc := json.NewEncoder(os.Stdout)
-	send := func(r *ExecReply) { _ = enc.Encode(r) }
+	var sendMu sync.Mutex
+	send := func(r *ExecReply) {
+		sendMu.Lock()
+		_ = enc.Encode(r)
+		sendMu.Unlock()
+	}
 
 	var input ExecPayload
 	if err := json.NewDecoder(os.Stdin).Decode(&input); err != nil {
@@ -105,11 +100,53 @@ func run() int {
 		return 1
 	}
 
+	// The event listener drains kloset's event bus (also required to keep the
+	// importer from blocking on a full channel) and folds events into a live
+	// State.
+	listener := newEventListener()
+	listener.Run(ctx.Events())
+
+	// Sample CPU/memory and read/write throughput on a ticker and stream them as
+	// ReplyState, so the control plane gets a live resource/throughput graph.
+	stateStop := make(chan struct{})
+	stateDone := make(chan struct{})
+	go func() {
+		defer close(stateDone)
+		resources := newResourceSampler()
+		network := newNetworkSampler(input.Op)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+
+		emit := func() {
+			resources.sample()
+			st := listener.State()
+			network.sample(st.IO)
+			st.Resources = resources.snapshot()
+			st.NumCPU = resources.numCPU()
+			st.Network = network.snapshot()
+			if raw, err := json.Marshal(&st); err == nil {
+				send(&ExecReply{Type: ReplyState, State: raw})
+			}
+		}
+
+		for {
+			select {
+			case <-stateStop:
+				emit() // final sample
+				return
+			case <-ticker.C:
+				emit()
+			}
+		}
+	}()
+
 	report, err := dispatch(ctx, &input)
 
-	// Stop and drain the event bus before emitting the terminal reply.
-	events.Close()
-	<-eventsDone
+	// Stop sampling, then close and drain the event bus.
+	close(stateStop)
+	<-stateDone
+	ctx.Events().Close()
+	listener.Wait()
 
 	if err != nil {
 		send(&ExecReply{Type: ReplyFailure, Message: fmt.Sprintf("%s failed: %s", input.Op, err)})
