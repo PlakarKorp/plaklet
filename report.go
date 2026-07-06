@@ -54,10 +54,52 @@ type ChecksReport struct {
 	Checks      []CheckReport `json:"checks"`
 }
 
+type RestoreReport struct {
+	SnapshotID  []byte        `json:"snapshot_id"`
+	Took        time.Duration `json:"took"`
+	LogicalSize uint64        `json:"logical_size"`
+	Content     BackupContent `json:"content"`
+	Store       StoreIO       `json:"store"`
+}
+
+type SyncIO struct {
+	Origin StoreIO `json:"origin"`
+	Target StoreIO `json:"target"`
+}
+
+type SyncReport struct {
+	SnapshotID           []byte        `json:"snapshot_id"`
+	SnapshotCreationTime time.Time     `json:"snapshot_creation_time"`
+	Took                 time.Duration `json:"took"`
+	Name                 string        `json:"name"`
+	SourceOrigin         string        `json:"source_origin"`
+	Root                 string        `json:"root"`
+	Size                 int           `json:"size"`
+	Items                int           `json:"items"`
+	Tags                 []string      `json:"tags"`
+	Environment          string        `json:"environment"`
+	Category             string        `json:"category"`
+	Dataset              string        `json:"dataset"`
+	DataClasses          []string      `json:"data_classes"`
+	LogicalSize          uint64        `json:"logical_size"`
+	Content              BackupContent `json:"content"`
+	Origin               StoreIO       `json:"origin"`
+	Target               StoreIO       `json:"target"`
+}
+
+type SyncsReport struct {
+	Took        time.Duration `json:"took"`
+	LogicalSize uint64        `json:"logical_size"`
+	Errors      uint64        `json:"errors"`
+	Syncs       []SyncReport  `json:"syncs"`
+}
+
 // Report is the top-level object carried by a ReplyReport. Exactly one of the
 // operation-specific fields is set, matching Type.
 type Report struct {
-	Type   string        `json:"type"`
-	Backup *BackupReport `json:"backup,omitempty"`
-	Check  *ChecksReport `json:"check,omitempty"`
+	Type    string         `json:"type"`
+	Backup  *BackupReport  `json:"backup,omitempty"`
+	Check   *ChecksReport  `json:"check,omitempty"`
+	Restore *RestoreReport `json:"restore,omitempty"`
+	Sync    *SyncsReport   `json:"sync,omitempty"`
 }

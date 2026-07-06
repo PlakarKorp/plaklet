@@ -46,11 +46,17 @@ values before the payload reaches plaklet.
 
 | Op | Needs | Description |
 |----|-------|-------------|
-| `backup` | source + target | Snapshot a source into a store |
-| `check`  | source (a store) | Verify every snapshot in a store |
+| `backup`  | source + target | Snapshot a source into a store |
+| `check`   | source (a store) | Verify every snapshot in a store |
+| `restore` | source (a store) + target (a destination) | Export a snapshot to a destination |
+| `sync`    | source + target (both stores) | Copy snapshots from one store to another |
 
-Other operations (sync, restore, prune, maintenance) follow the same pattern and
-can be added in their own files.
+`restore` and `sync` select snapshots via `task_config`: `snapshot` (a specific
+ID), `latest` (`"true"`), and `tags` (comma-separated). `restore` requires
+exactly one match; `sync` copies every match the target does not already have.
+
+Remaining operations (prune, maintenance) follow the same pattern and can be
+added in their own files.
 
 ## Connectors
 
