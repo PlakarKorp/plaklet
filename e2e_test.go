@@ -95,9 +95,19 @@ func TestEndToEnd(t *testing.T) {
 	// Each phase runs as a subtest so its context (and pebble cache) is torn down
 	// via t.Cleanup before the next phase begins, rather than all contexts piling
 	// up until the parent test ends.
+	t.Run("create", func(t *testing.T) {
+		ctx := newTestContext(t)
+		// Create the store via the create op (unencrypted: no passphrase field).
+		_, err := dispatch(ctx, &ExecPayload{
+			Op:         "create",
+			TaskConfig: map[string]string{"no_encryption": "true"},
+			Source:     store,
+		})
+		require.NoError(t, err)
+	})
+
 	t.Run("backup", func(t *testing.T) {
 		ctx := newTestContext(t)
-		createFSRepo(t, ctx, repoDir)
 		rep, err := dispatch(ctx, &ExecPayload{
 			Op:         "backup",
 			TaskConfig: map[string]string{"tags": "e2e"},

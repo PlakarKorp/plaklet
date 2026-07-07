@@ -177,6 +177,8 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return restore(ctx, input)
 	case "sync":
 		return synchronize(ctx, input)
+	case "create":
+		return create(ctx, input)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
 	}
