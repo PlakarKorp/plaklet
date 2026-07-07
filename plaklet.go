@@ -176,12 +176,32 @@ func Main(args []string) int {
 	}
 
 	if report != nil {
+		if w := backupWarning(input.Op, report); w != nil {
+			send(w)
+		}
 		if raw, merrr := json.Marshal(report); merrr == nil {
 			send(&ExecReply{Type: ReplyReport, Report: raw})
 		}
 	}
 	send(&ExecReply{Type: ReplySuccess})
 	return 0
+}
+
+// backupWarning returns a warning reply when a backup committed a snapshot but
+// couldn't read some files, or nil otherwise. Such a run is a
+// success-with-warnings, not a failure (standard plakar semantics: the snapshot
+// is still valid). The per-file error count lives in the report but nothing
+// downstream inspects it, so we surface it as a warning the operator sees while
+// the job still succeeds.
+func backupWarning(op string, report *Report) *ExecReply {
+	if report == nil || report.Backup == nil || report.Backup.Errors <= 0 {
+		return nil
+	}
+	return &ExecReply{
+		Type: ReplyWarning,
+		Message: fmt.Sprintf("%s completed with %d file error(s); those files were skipped",
+			op, report.Backup.Errors),
+	}
 }
 
 // dispatch routes an operation to its handler. Only the operations a remote edge
