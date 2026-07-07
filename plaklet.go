@@ -1,12 +1,13 @@
-// Command plaklet is a single-shot task executor built on kloset. It reads one
+// Package plaklet is a single-shot task executor built on kloset. It reads one
 // ExecPayload as JSON from stdin, runs the requested operation (backup, check,
 // ...) against kloset connectors linked in-process, and streams ExecReply
 // messages as JSON to stdout — a terminal success/failure reply last.
 //
 // It depends only on kloset and a set of built-in connectors (see
-// connectors.go); it has no dependency on plakman. It is spawned by a driver
-// such as the plakman executor or plakar-edge.
-package main
+// connectors.go); it has no dependency on plakman. It runs either as the
+// standalone `plaklet` binary (see cmd/plaklet) or embedded in a driver such as
+// plakar-edge, which invokes Main directly.
+package plaklet
 
 import (
 	"encoding/json"
@@ -41,21 +42,23 @@ func splitList(v string) []string {
 	return out
 }
 
-func main() {
-	os.Exit(run())
-}
-
-func run() int {
+// Main runs the plaklet executor with the given argument list (excluding the
+// program name) and returns a process exit code. It is the single entry point
+// for both the standalone binary and an embedding driver like plakar-edge.
+func Main(args []string) int {
 	var pkgdir, cachedir string
 	var quiet bool
 	var cpu, concurrency int
 
-	flag.StringVar(&pkgdir, "pkg", "", "package/integrations directory (reserved; connectors are linked in-process)")
-	flag.StringVar(&cachedir, "cache", "", "cache directory (required)")
-	flag.IntVar(&cpu, "cpu", max(runtime.GOMAXPROCS(0)-1, 1), "number of CPUs to use")
-	flag.IntVar(&concurrency, "concurrency", 0, "maximum concurrency (0 = default)")
-	flag.BoolVar(&quiet, "quiet", false, "quiet")
-	flag.Parse()
+	fs := flag.NewFlagSet("plaklet", flag.ContinueOnError)
+	fs.StringVar(&pkgdir, "pkg", "", "package/integrations directory (reserved; connectors are linked in-process)")
+	fs.StringVar(&cachedir, "cache", "", "cache directory (required)")
+	fs.IntVar(&cpu, "cpu", max(runtime.GOMAXPROCS(0)-1, 1), "number of CPUs to use")
+	fs.IntVar(&concurrency, "concurrency", 0, "maximum concurrency (0 = default)")
+	fs.BoolVar(&quiet, "quiet", false, "quiet")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 
 	if cachedir == "" {
 		fmt.Fprintln(os.Stderr, "plaklet: -cache is required")

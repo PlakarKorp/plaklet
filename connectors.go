@@ -1,4 +1,4 @@
-package main
+package plaklet
 
 // Built-in connectors, registered in-process at init time via their package
 // side effects. This is the same set the public plakar CLI compiles in. Unlike
