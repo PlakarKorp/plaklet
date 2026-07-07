@@ -85,7 +85,13 @@ func syncSnap(srcRepo, dstRepo *repository.Repository, id objects.MAC) (*SyncRep
 	}
 	defer srcSnap.Close()
 
-	dstSnap, err := snapshot.Create(dstRepo, repository.DefaultType, "", srcSnap.Header.Identifier, &snapshot.BuilderOptions{})
+	dstSnap, err := snapshot.Create(dstRepo, repository.DefaultType, "", srcSnap.Header.Identifier, &snapshot.BuilderOptions{
+		// Fold each new state into the destination repo's aggregated state in
+		// process (see backup.go for why the edge does this itself).
+		StateRefresher: func(_ objects.MAC, _ bool) error {
+			return dstRepo.RebuildState()
+		},
+	})
 	if err != nil {
 		return nil, err
 	}

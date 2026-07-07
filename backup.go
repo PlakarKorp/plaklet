@@ -43,6 +43,14 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		Environment: input.Source.Environment,
 		Dataset:     input.Source.Id,
 		DataClasses: input.Source.DataClasses,
+		// After each checkpoint/commit writes a new state file, fold it into the
+		// repository's aggregated state. plakman does this via its cached daemon;
+		// the edge has no daemon, so we rebuild in-process (the daemon itself just
+		// calls repo.RebuildState()). Without this, aggregated state is only
+		// rebuilt lazily at next open and grows unbounded per run.
+		StateRefresher: func(_ objects.MAC, _ bool) error {
+			return repo.RebuildState()
+		},
 	}
 
 	snap, err := snapshot.Create(repo, repository.DefaultType, "", objects.NilMac, opts)

@@ -174,3 +174,48 @@ func TestDispatchUnsupportedOp(t *testing.T) {
 	_, err := dispatch(kcontext.NewKContext(), &ExecPayload{Op: "bogus"})
 	require.Error(t, err)
 }
+
+// TestIncrementalBackupDedups proves the StateRefresher works: backing up an
+// unchanged source twice must dedup against the first snapshot's chunks, which
+// only happens if the first backup's state was folded into the repository's
+// aggregated state (what plakman's cached daemon does; the edge does it in
+// process). Without the refresher the second backup sees no prior chunks and
+// caches nothing. Uses its own store so it doesn't perturb TestEndToEnd.
+func TestIncrementalBackupDedups(t *testing.T) {
+	srcDir := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	// A file large enough to be a real chunk, so dedup is meaningful.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "data.bin"),
+		bytes.Repeat([]byte("plaklet-incremental-"), 4096), 0o644))
+
+	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
+	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+
+	run := func(op string, src, tgt *Configuration) *Report {
+		ctx := newTestContext(t)
+		rep, err := dispatch(ctx, &ExecPayload{Op: op, Source: src, Target: tgt})
+		require.NoError(t, err)
+		return rep
+	}
+
+	run("create", store, nil)
+	first := run("backup", source, store)
+	require.NotNil(t, first.Backup)
+
+	second := run("backup", source, store)
+	require.NotNil(t, second.Backup)
+
+	// The second backup must have cached (deduped) chunks — the repo saw the
+	// first snapshot's state. Chunk counts live in the state stream, but the
+	// report's store bytes-written is the observable proxy: the second run writes
+	// strictly less than the first (only the new snapshot's metadata, not the
+	// re-chunked file).
+	require.Less(t, second.Backup.Store.BytesWritten, first.Backup.Store.BytesWritten,
+		"second backup wrote >= first; aggregated state was not refreshed (dedup failed)")
+
+	// And the repository is consistent: check both snapshots, no errors.
+	chk := run("check", store, nil)
+	require.NotNil(t, chk.Check)
+	require.Len(t, chk.Check.Checks, 2)
+	require.Zero(t, chk.Check.Errors)
+}
