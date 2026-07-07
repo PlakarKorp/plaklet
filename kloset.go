@@ -3,6 +3,7 @@ package plaklet
 import (
 	"fmt"
 	"runtime"
+	"strings"
 
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/exporter"
@@ -11,26 +12,51 @@ import (
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/repository"
+	"github.com/PlakarKorp/pkg"
+	"github.com/PlakarKorp/plaklet/plugin"
 )
 
-// mkimporter builds a source importer from a resolved connector configuration
-// using kloset's in-process connector registry (see connectors.go for the
-// registered backends).
+// protocolOf extracts the protocol (scheme) from a configuration's location
+// field, e.g. "s3" from "s3://host/bucket".
+func protocolOf(conf *Configuration) string {
+	for _, f := range conf.Fields {
+		if f.Key == "location" {
+			proto, _, _ := strings.Cut(f.Val, "://")
+			return proto
+		}
+	}
+	return ""
+}
+
+// mkimporter builds a source importer. It first tries a loaded plugin for the
+// connector's integration; if none is registered it falls back to kloset's
+// compiled-in importer registry (fs, stdio, tar).
 func mkimporter(ctx *kcontext.KContext, conf *Configuration) (importer.Importer, error) {
-	return importer.NewImporter(ctx, &connectors.Options{
+	opts := &connectors.Options{
 		Hostname:        "plaklet",
 		OperatingSystem: runtime.GOOS,
 		Architecture:    runtime.GOARCH,
 		CWD:             "/",
 		MaxConcurrency:  ctx.MaxConcurrency,
-	}, conf.params())
+	}
+	if p, err := pluginFor(conf, pkg.ConnectorTypeImporter); err == nil {
+		return p.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
+	} else if err != plugin.ErrPluginNotExist {
+		return nil, err
+	}
+	return importer.NewImporter(ctx, opts, conf.params())
 }
 
-// mkexporter builds a destination exporter from a resolved connector config.
+// mkexporter builds a destination exporter, preferring a loaded plugin and
+// falling back to kloset's compiled-in exporter registry (fs, stdio).
 func mkexporter(ctx *kcontext.KContext, conf *Configuration) (exporter.Exporter, error) {
-	return exporter.NewExporter(ctx, &connectors.Options{
-		MaxConcurrency: ctx.MaxConcurrency,
-	}, conf.params())
+	opts := &connectors.Options{MaxConcurrency: ctx.MaxConcurrency}
+	if p, err := pluginFor(conf, pkg.ConnectorTypeExporter); err == nil {
+		return p.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
+	} else if err != plugin.ErrPluginNotExist {
+		return nil, err
+	}
+	return exporter.NewExporter(ctx, opts, conf.params())
 }
 
 // mkstorage opens the store described by a resolved connector config and returns

@@ -25,6 +25,7 @@ import (
 	"github.com/PlakarKorp/kloset/caching/pebble"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/logging"
+	"github.com/PlakarKorp/pkg"
 )
 
 // splitList parses a comma-separated task-config value into a trimmed,
@@ -85,6 +86,24 @@ func Main(args []string) int {
 	ctx.SetLogger(logging.NewLogger(os.Stderr, os.Stderr))
 	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
 	defer ctx.GetCache().Close()
+
+	// Load any connector packages (.ptar plugins) present in pkgdir. Compiled-in
+	// connectors (fs, stdio, tar, ...) work without this; plugins (s3, sftp, ...)
+	// the edge fetched through the control-plane proxy are registered here.
+	if pkgdir != "" {
+		backend, err := pkg.NewFlatBackend(ctx, pkgdir, cachedir, &pkg.FlatBackendOptions{
+			LoadHook:   pkgLoadHook,
+			UnloadHook: pkgUnloadHook,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "plaklet: package backend: %s\n", err)
+			return 1
+		}
+		if err := backend.LoadAll(); err != nil {
+			fmt.Fprintf(os.Stderr, "plaklet: load packages: %s\n", err)
+			return 1
+		}
+	}
 
 	enc := json.NewEncoder(os.Stdout)
 	var sendMu sync.Mutex
