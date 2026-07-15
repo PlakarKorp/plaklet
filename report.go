@@ -39,6 +39,8 @@ type BackupReport struct {
 	Content              BackupContent `json:"content"`
 	Errors               int           `json:"errors"`
 	Store                StoreIO       `json:"store"`
+	URN                  string        `json:"urn"`
+	URNID                string        `json:"urnid"`
 }
 
 type CheckReport struct {
