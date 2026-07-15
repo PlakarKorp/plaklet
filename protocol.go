@@ -1,6 +1,10 @@
 package plaklet
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/google/uuid"
+)
 
 // This file defines the stdin/stdout wire protocol plaklet speaks with whatever
 // drives it (the plakman executor, or plakar-edge). The shapes are duplicated
@@ -50,6 +54,8 @@ type Configuration struct {
 	Fields      []ConfigurationField `json:"fields"`
 	Environment string               `json:"environment,omitempty"`
 	DataClasses []string             `json:"data_classes,omitempty"`
+	URN         string               `json:"urn"`
+	URNID       uuid.UUID            `json:"urnid"`
 }
 
 type Integration struct {

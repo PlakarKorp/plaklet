@@ -104,6 +104,8 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 			BytesRead:    repo.RBytes(),
 			BytesWritten: repo.WBytes(),
 		},
+		URN:   input.Source.URN,
+		URNID: input.Source.URNID.String(),
 	}
 	br.Errors = int(src.Summary.Directory.Errors + src.Summary.Below.Errors)
 
