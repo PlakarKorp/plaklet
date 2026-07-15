@@ -170,15 +170,18 @@ func Main(args []string) int {
 	ctx.Events().Close()
 	listener.Wait()
 
+	// listener.Wait() has drained every event, so the final State is complete
+	// and race-free here — safe to fold event-only errors into the verdict.
+	if err == nil {
+		err = terminalError(input.Op, report, listener.State())
+	}
+
 	if err != nil {
 		send(&ExecReply{Type: ReplyFailure, Message: fmt.Sprintf("%s failed: %s", input.Op, err)})
 		return 0
 	}
 
 	if report != nil {
-		if w := backupWarning(input.Op, report); w != nil {
-			send(w)
-		}
 		if raw, merrr := json.Marshal(report); merrr == nil {
 			send(&ExecReply{Type: ReplyReport, Report: raw})
 		}
@@ -187,21 +190,35 @@ func Main(args []string) int {
 	return 0
 }
 
-// backupWarning returns a warning reply when a backup committed a snapshot but
-// couldn't read some files, or nil otherwise. Such a run is a
-// success-with-warnings, not a failure (standard plakar semantics: the snapshot
-// is still valid). The per-file error count lives in the report but nothing
-// downstream inspects it, so we surface it as a warning the operator sees while
-// the job still succeeds.
-func backupWarning(op string, report *Report) *ExecReply {
-	if report == nil || report.Backup == nil || report.Backup.Errors <= 0 {
+// terminalError decides whether a completed operation should fail the job, for
+// the operations whose failures surface only after the fact rather than as a
+// returned error. A backup or restore commits/returns nil even when it couldn't
+// read or write some entries; check tallies snapshot errors in its own report
+// and already returns an error itself. We treat any such error count as a job
+// failure — a partial run is not a clean success. state carries the per-entry
+// error counters folded from the (now fully drained) event bus, used for
+// restore whose failures live only in events. Mutates report to record the
+// count. Returns nil when the run is clean.
+func terminalError(op string, report *Report, state State) error {
+	if report == nil {
 		return nil
 	}
-	return &ExecReply{
-		Type: ReplyWarning,
-		Message: fmt.Sprintf("%s completed with %d file error(s); those files were skipped",
-			op, report.Backup.Errors),
+	switch op {
+	case "backup":
+		if report.Backup != nil && report.Backup.Errors > 0 {
+			return fmt.Errorf("backup failed: %d file(s) could not be read", report.Backup.Errors)
+		}
+	case "restore":
+		if report.Restore != nil {
+			entryErrors := state.Paths.Error + state.Files.Error + state.Dirs.Error +
+				state.Symlinks.Error + state.Xattrs.Error
+			if entryErrors != 0 {
+				report.Restore.Errors = entryErrors
+				return fmt.Errorf("restore failed: %d entries could not be restored", entryErrors)
+			}
+		}
 	}
+	return nil
 }
 
 // dispatch routes an operation to its handler. Only the operations a remote edge

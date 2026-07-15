@@ -61,6 +61,7 @@ type RestoreReport struct {
 	Took        time.Duration `json:"took"`
 	LogicalSize uint64        `json:"logical_size"`
 	Content     BackupContent `json:"content"`
+	Errors      uint64        `json:"errors"`
 	Store       StoreIO       `json:"store"`
 }
 

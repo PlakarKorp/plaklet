@@ -69,5 +69,10 @@ func check(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	}
 
 	ccr.Took = time.Since(start)
-	return &Report{Type: input.Op, Check: &ccr}, nil
+
+	report := &Report{Type: input.Op, Check: &ccr}
+	if ccr.Errors != 0 {
+		return report, fmt.Errorf("check failed: %d of %d snapshot(s) had errors", ccr.Errors, len(snapshotIDs))
+	}
+	return report, nil
 }
