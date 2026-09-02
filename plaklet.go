@@ -43,6 +43,20 @@ func splitList(v string) []string {
 	return out
 }
 
+// indexedList reads a flattened string list from a task config: the control
+// plane flattens []string values as "key.0", "key.1", ... (see plakman's
+// flatten.PutStringList). Stops at the first missing index.
+func indexedList(cfg map[string]string, key string) []string {
+	var out []string
+	for i := 0; ; i++ {
+		v, ok := cfg[fmt.Sprintf("%s.%d", key, i)]
+		if !ok {
+			return out
+		}
+		out = append(out, v)
+	}
+}
+
 // Main runs the plaklet executor with the given argument list (excluding the
 // program name) and returns a process exit code. It is the single entry point
 // for both the standalone binary and an embedding driver like plakar-edge.
@@ -235,6 +249,8 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return synchronize(ctx, input)
 	case "create":
 		return create(ctx, input)
+	case "rm":
+		return rm(ctx, input)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
 	}

@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -167,6 +168,52 @@ func TestEndToEnd(t *testing.T) {
 		require.NotNil(t, rep.Sync)
 		require.Empty(t, rep.Sync.Syncs, "second sync copies nothing")
 	})
+}
+
+// TestRmEndToEnd removes a real snapshot: back up twice, rm the first
+// snapshot, and verify only the second remains. Also proves the no-op contract:
+// an rm naming nothing succeeds with an empty report before touching the store.
+func TestRmEndToEnd(t *testing.T) {
+	srcDir := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
+
+	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
+	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+
+	run := func(op string, cfg map[string]string, src, tgt *Configuration) *Report {
+		ctx := newTestContext(t)
+		rep, err := dispatch(ctx, &ExecPayload{Op: op, TaskConfig: cfg, Source: src, Target: tgt})
+		require.NoError(t, err)
+		return rep
+	}
+
+	run("create", nil, store, nil)
+	first := run("backup", nil, source, store)
+	require.NotNil(t, first.Backup)
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("world"), 0o644))
+	second := run("backup", nil, source, store)
+	require.NotNil(t, second.Backup)
+
+	// Naming nothing removes nothing and succeeds.
+	rep := run("rm", nil, store, nil)
+	require.NotNil(t, rep.Rm)
+	require.Zero(t, rep.Rm.Errors)
+	require.Empty(t, rep.Rm.SnapshotIDs)
+
+	rep = run("rm", map[string]string{
+		"snapshot_ids.0": fmt.Sprintf("%x", first.Backup.SnapshotID),
+	}, store, nil)
+	require.NotNil(t, rep.Rm)
+	require.Zero(t, rep.Rm.Errors)
+	require.Equal(t, [][]byte{first.Backup.SnapshotID}, rep.Rm.SnapshotIDs)
+
+	// Only the second snapshot survives, and the store is still consistent.
+	chk := run("check", nil, store, nil)
+	require.NotNil(t, chk.Check)
+	require.Len(t, chk.Check.Checks, 1)
+	require.Equal(t, second.Backup.SnapshotID, chk.Check.Checks[0].SnapshotID)
+	require.Zero(t, chk.Check.Errors)
 }
 
 func TestDispatchUnsupportedOp(t *testing.T) {
