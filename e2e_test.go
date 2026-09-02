@@ -86,6 +86,7 @@ func TestEndToEnd(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("world!!"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "skip.log"), []byte("noise"), 0o644))
 
 	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
 	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
@@ -109,15 +110,17 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("backup", func(t *testing.T) {
 		ctx := newTestContext(t)
+		// Labels and ignores arrive as the control plane's flattened lists
+		// ("labels.N"/"ignores.N", see BackupTaskConfig.Flatten in plakman).
 		rep, err := dispatch(ctx, &ExecPayload{
 			Op:         "backup",
-			TaskConfig: map[string]string{"tags": "e2e"},
+			TaskConfig: map[string]string{"labels.0": "e2e", "ignores.0": "skip.log"},
 			Source:     source,
 			Target:     store,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Backup)
-		require.Equal(t, uint64(2), rep.Backup.Content.Files)
+		require.Equal(t, uint64(2), rep.Backup.Content.Files, "skip.log must be excluded")
 		require.NotEmpty(t, rep.Backup.SnapshotID)
 		require.Contains(t, rep.Backup.Tags, "e2e")
 	})
@@ -129,14 +132,27 @@ func TestEndToEnd(t *testing.T) {
 		require.NotNil(t, rep.Check)
 		require.Len(t, rep.Check.Checks, 1)
 		require.Zero(t, rep.Check.Errors)
+
+		// check honors the task's locate filters: a label that matches nothing
+		// selects nothing.
+		rep, err = dispatch(newTestContext(t), &ExecPayload{
+			Op:         "check",
+			TaskConfig: map[string]string{"labels.0": "no-such-label"},
+			Source:     store,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, rep.Check)
+		require.Empty(t, rep.Check.Checks)
 	})
 
 	t.Run("restore", func(t *testing.T) {
 		ctx := newTestContext(t)
 		dest := fsConf("33333333-3333-3333-3333-333333333333", "exporter", restoreDir)
+		// The stored restore config carries the latest flag in both forms: the
+		// task-level "latest" and the fold into "locate.filter.latest".
 		rep, err := dispatch(ctx, &ExecPayload{
 			Op:         "restore",
-			TaskConfig: map[string]string{"latest": "true"},
+			TaskConfig: map[string]string{"latest": "true", "locate.filter.latest": "true"},
 			Source:     store,
 			Target:     dest,
 		})

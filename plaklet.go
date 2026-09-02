@@ -17,7 +17,6 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -27,21 +26,6 @@ import (
 	"github.com/PlakarKorp/kloset/logging"
 	"github.com/PlakarKorp/pkg"
 )
-
-// splitList parses a comma-separated task-config value into a trimmed,
-// empty-free slice.
-func splitList(v string) []string {
-	if v == "" {
-		return nil
-	}
-	var out []string
-	for _, p := range strings.Split(v, ",") {
-		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, p)
-		}
-	}
-	return out
-}
 
 // indexedList reads a flattened string list from a task config: the control
 // plane flattens []string values as "key.0", "key.1", ... (see plakman's

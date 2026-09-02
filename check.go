@@ -10,7 +10,9 @@ import (
 )
 
 // check verifies the snapshots in a store, mirroring the plakman executor's
-// check flow on top of kloset. It checks every snapshot the store holds.
+// check flow on top of kloset. It checks the snapshots the task config's
+// locate filters select — every snapshot the store holds when the config
+// names none.
 func check(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if input.Source == nil {
 		return nil, fmt.Errorf("source must be set for check")
@@ -27,7 +29,7 @@ func check(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return nil, err
 	}
 
-	snapshotIDs, err := locate.LocateSnapshotIDs(repo, locate.NewDefaultLocateOptions())
+	snapshotIDs, err := locate.LocateSnapshotIDs(repo, locateOptions(input.TaskConfig))
 	if err != nil {
 		return nil, err
 	}
