@@ -216,6 +216,39 @@ func TestRmEndToEnd(t *testing.T) {
 	require.Zero(t, chk.Check.Errors)
 }
 
+// TestCreateHonoursCompression proves the create op resolves a requested
+// compression algorithm instead of always writing the default.
+func TestCreateHonoursCompression(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+
+	ctx := newTestContext(t)
+	_, err := dispatch(ctx, &ExecPayload{
+		Op:         "create",
+		TaskConfig: map[string]string{"no_encryption": "true", "compression": "gzip"},
+		Source:     store,
+	})
+	require.NoError(t, err)
+
+	st, err := storage.New(ctx, map[string]string{"location": "fs://" + repoDir})
+	require.NoError(t, err)
+	defer st.Close(ctx)
+	wrapped, err := st.Open(ctx)
+	require.NoError(t, err)
+	config, err := storage.NewConfigurationFromWrappedBytes(wrapped)
+	require.NoError(t, err)
+	require.NotNil(t, config.Compression)
+	require.Equal(t, "GZIP", config.Compression.Algorithm)
+
+	// An algorithm kloset doesn't know is refused.
+	_, err = dispatch(newTestContext(t), &ExecPayload{
+		Op:         "create",
+		TaskConfig: map[string]string{"compression": "bogus"},
+		Source:     fsConf("33333333-3333-3333-3333-333333333333", "storage", filepath.Join(t.TempDir(), "repo2")),
+	})
+	require.Error(t, err)
+}
+
 func TestDispatchUnsupportedOp(t *testing.T) {
 	// A bare context is enough: dispatch rejects the op before touching kloset.
 	_, err := dispatch(kcontext.NewKContext(), &ExecPayload{Op: "bogus"})
