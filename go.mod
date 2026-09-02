@@ -9,8 +9,9 @@ require (
 	github.com/PlakarKorp/integrations/ptar v1.1.0
 	github.com/PlakarKorp/integrations/stdio v1.1.0
 	github.com/PlakarKorp/integrations/tar v1.1.0
-	github.com/PlakarKorp/kloset v1.2.0-alpha.4
+	github.com/PlakarKorp/kloset v1.1.5
 	github.com/PlakarKorp/pkg v1.1.2
+	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.26.6
 	github.com/stretchr/testify v1.11.1
 	google.golang.org/grpc v1.81.1
@@ -42,7 +43,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
