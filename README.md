@@ -50,10 +50,15 @@ values before the payload reaches plaklet.
 | `check`   | source (a store) | Verify every snapshot in a store |
 | `restore` | source (a store) + target (a destination) | Export a snapshot to a destination |
 | `sync`    | source + target (both stores) | Copy snapshots from one store to another |
+| `create`  | source (a store) | Initialize a kloset store |
+| `rm`      | source (a store) | Remove the snapshots named by `task_config` |
 
 `restore` and `sync` select snapshots via `task_config`: `snapshot` (a specific
 ID), `latest` (`"true"`), and `tags` (comma-separated). `restore` requires
 exactly one match; `sync` copies every match the target does not already have.
+`rm` takes the full snapshot IDs to remove as an indexed list
+(`snapshot_ids.0`, `snapshot_ids.1`, …), the flattened form the control plane
+stores; naming nothing removes nothing and succeeds.
 
 Remaining operations (prune, maintenance) follow the same pattern and can be
 added in their own files.

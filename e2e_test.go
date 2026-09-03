@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -85,6 +86,7 @@ func TestEndToEnd(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("world!!"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "skip.log"), []byte("noise"), 0o644))
 
 	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
 	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
@@ -108,15 +110,17 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("backup", func(t *testing.T) {
 		ctx := newTestContext(t)
+		// Labels and ignores arrive as the control plane's flattened lists
+		// ("labels.N"/"ignores.N", see BackupTaskConfig.Flatten in plakman).
 		rep, err := dispatch(ctx, &ExecPayload{
 			Op:         "backup",
-			TaskConfig: map[string]string{"tags": "e2e"},
+			TaskConfig: map[string]string{"labels.0": "e2e", "ignores.0": "skip.log"},
 			Source:     source,
 			Target:     store,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Backup)
-		require.Equal(t, uint64(2), rep.Backup.Content.Files)
+		require.Equal(t, uint64(2), rep.Backup.Content.Files, "skip.log must be excluded")
 		require.NotEmpty(t, rep.Backup.SnapshotID)
 		require.Contains(t, rep.Backup.Tags, "e2e")
 	})
@@ -128,14 +132,27 @@ func TestEndToEnd(t *testing.T) {
 		require.NotNil(t, rep.Check)
 		require.Len(t, rep.Check.Checks, 1)
 		require.Zero(t, rep.Check.Errors)
+
+		// check honors the task's locate filters: a label that matches nothing
+		// selects nothing.
+		rep, err = dispatch(newTestContext(t), &ExecPayload{
+			Op:         "check",
+			TaskConfig: map[string]string{"labels.0": "no-such-label"},
+			Source:     store,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, rep.Check)
+		require.Empty(t, rep.Check.Checks)
 	})
 
 	t.Run("restore", func(t *testing.T) {
 		ctx := newTestContext(t)
 		dest := fsConf("33333333-3333-3333-3333-333333333333", "exporter", restoreDir)
+		// The stored restore config carries the latest flag in both forms: the
+		// task-level "latest" and the fold into "locate.filter.latest".
 		rep, err := dispatch(ctx, &ExecPayload{
 			Op:         "restore",
-			TaskConfig: map[string]string{"latest": "true"},
+			TaskConfig: map[string]string{"latest": "true", "locate.filter.latest": "true"},
 			Source:     store,
 			Target:     dest,
 		})
@@ -167,6 +184,85 @@ func TestEndToEnd(t *testing.T) {
 		require.NotNil(t, rep.Sync)
 		require.Empty(t, rep.Sync.Syncs, "second sync copies nothing")
 	})
+}
+
+// TestRmEndToEnd removes a real snapshot: back up twice, rm the first
+// snapshot, and verify only the second remains. Also proves the no-op contract:
+// an rm naming nothing succeeds with an empty report before touching the store.
+func TestRmEndToEnd(t *testing.T) {
+	srcDir := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
+
+	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
+	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+
+	run := func(op string, cfg map[string]string, src, tgt *Configuration) *Report {
+		ctx := newTestContext(t)
+		rep, err := dispatch(ctx, &ExecPayload{Op: op, TaskConfig: cfg, Source: src, Target: tgt})
+		require.NoError(t, err)
+		return rep
+	}
+
+	run("create", nil, store, nil)
+	first := run("backup", nil, source, store)
+	require.NotNil(t, first.Backup)
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("world"), 0o644))
+	second := run("backup", nil, source, store)
+	require.NotNil(t, second.Backup)
+
+	// Naming nothing removes nothing and succeeds.
+	rep := run("rm", nil, store, nil)
+	require.NotNil(t, rep.Rm)
+	require.Zero(t, rep.Rm.Errors)
+	require.Empty(t, rep.Rm.SnapshotIDs)
+
+	rep = run("rm", map[string]string{
+		"snapshot_ids.0": fmt.Sprintf("%x", first.Backup.SnapshotID),
+	}, store, nil)
+	require.NotNil(t, rep.Rm)
+	require.Zero(t, rep.Rm.Errors)
+	require.Equal(t, [][]byte{first.Backup.SnapshotID}, rep.Rm.SnapshotIDs)
+
+	// Only the second snapshot survives, and the store is still consistent.
+	chk := run("check", nil, store, nil)
+	require.NotNil(t, chk.Check)
+	require.Len(t, chk.Check.Checks, 1)
+	require.Equal(t, second.Backup.SnapshotID, chk.Check.Checks[0].SnapshotID)
+	require.Zero(t, chk.Check.Errors)
+}
+
+// TestCreateHonoursCompression proves the create op resolves a requested
+// compression algorithm instead of always writing the default.
+func TestCreateHonoursCompression(t *testing.T) {
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+
+	ctx := newTestContext(t)
+	_, err := dispatch(ctx, &ExecPayload{
+		Op:         "create",
+		TaskConfig: map[string]string{"no_encryption": "true", "compression": "gzip"},
+		Source:     store,
+	})
+	require.NoError(t, err)
+
+	st, err := storage.New(ctx, map[string]string{"location": "fs://" + repoDir})
+	require.NoError(t, err)
+	defer st.Close(ctx)
+	wrapped, err := st.Open(ctx)
+	require.NoError(t, err)
+	config, err := storage.NewConfigurationFromWrappedBytes(wrapped)
+	require.NoError(t, err)
+	require.NotNil(t, config.Compression)
+	require.Equal(t, "GZIP", config.Compression.Algorithm)
+
+	// An algorithm kloset doesn't know is refused.
+	_, err = dispatch(newTestContext(t), &ExecPayload{
+		Op:         "create",
+		TaskConfig: map[string]string{"compression": "bogus"},
+		Source:     fsConf("33333333-3333-3333-3333-333333333333", "storage", filepath.Join(t.TempDir(), "repo2")),
+	})
+	require.Error(t, err)
 }
 
 func TestDispatchUnsupportedOp(t *testing.T) {

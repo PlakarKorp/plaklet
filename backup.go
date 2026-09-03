@@ -11,14 +11,16 @@ import (
 )
 
 // backup runs a source -> store backup, mirroring the plakman executor's backup
-// flow but built entirely on kloset. Tags/ignores come from the task config.
+// flow but built entirely on kloset. The snapshot tags and exclude rules come
+// from the task config's flattened "labels.N" / "ignores.N" lists (see
+// BackupTaskConfig.Flatten in plakman's contract).
 func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if input.Source == nil || input.Target == nil {
 		return nil, fmt.Errorf("source and target must be set for backup")
 	}
 
-	tags := splitList(input.TaskConfig["tags"])
-	ignores := splitList(input.TaskConfig["ignore"])
+	tags := indexedList(input.TaskConfig, "labels")
+	ignores := indexedList(input.TaskConfig, "ignores")
 
 	imp, err := mkimporter(ctx, input.Source)
 	if err != nil {

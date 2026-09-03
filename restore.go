@@ -11,8 +11,9 @@ import (
 )
 
 // restore exports a single snapshot from a store (source) to a destination
-// (target exporter). It selects exactly one snapshot: an explicit "snapshot" id
-// in the task config, otherwise the latest match.
+// (target exporter). It selects exactly one snapshot: an explicit
+// "snapshot_id" in the task config, otherwise the latest match of the
+// config's locate filters.
 func restore(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if input.Source == nil || input.Target == nil {
 		return nil, fmt.Errorf("source and target must be set for restore")

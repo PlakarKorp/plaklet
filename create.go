@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash"
 	"io"
+	"strings"
 
 	"github.com/PlakarKorp/kloset/compression"
 	"github.com/PlakarKorp/kloset/connectors/storage"
@@ -17,8 +18,9 @@ import (
 
 // create initializes a new kloset store at the source location. Encryption is on
 // by default when the store's passphrase field is set; task_config "no_encryption"
-// / "no_compression" ("true") turn those off. This mirrors the plakman plaklet's
-// create op so an edge can initialize the store it will back up into.
+// / "no_compression" ("true") turn those off, and "compression" names the
+// algorithm to use instead of kloset's default. This mirrors the plakman
+// plaklet's create op so an edge can initialize the store it will back up into.
 func create(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if input.Source == nil {
 		return nil, fmt.Errorf("source must be set for create")
@@ -31,9 +33,17 @@ func create(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	defer store.Close(ctx)
 
 	cfg := storage.NewConfiguration()
-	if input.TaskConfig["no_compression"] == "true" {
+	switch {
+	case input.TaskConfig["no_compression"] == "true":
 		cfg.Compression = nil
-	} else {
+	case input.TaskConfig["compression"] != "":
+		compressionConfiguration, err := compression.LookupDefaultConfiguration(strings.ToUpper(input.TaskConfig["compression"]))
+		if err != nil {
+			return nil, fmt.Errorf("compression algorithm %q: %w", input.TaskConfig["compression"], err)
+		}
+		cfg.Compression = compressionConfiguration
+	default:
+		// No preference: kloset keeps the say on its own default.
 		cfg.Compression = compression.NewDefaultConfiguration()
 	}
 
