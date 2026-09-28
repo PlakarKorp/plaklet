@@ -104,3 +104,33 @@ func TestIODirFromEventCoercesNumbers(t *testing.T) {
 	require.Equal(t, 1.5, d.Overall)
 	require.Equal(t, 0.0, d.OverallWall) // absent -> zero
 }
+
+func TestUpdateStateRecentPaths(t *testing.T) {
+	var s State
+	updateState(&s, ev("path", map[string]any{"path": "/a"}))
+	updateState(&s, ev("path", map[string]any{"path": "/b"}))
+	require.Equal(t, []RecentPath{
+		{Path: "/b", Status: "in-progress"},
+		{Path: "/a", Status: "in-progress"},
+	}, s.RecentPaths)
+
+	updateState(&s, ev("path.error", map[string]any{"path": "/a"}))
+	updateState(&s, ev("path.cached", map[string]any{"path": "/b"}))
+	require.Equal(t, []RecentPath{
+		{Path: "/b", Status: "ok"},
+		{Path: "/a", Status: "error"},
+	}, s.RecentPaths)
+}
+
+func TestUpdateStateRecentPathsKeepsInProgressFirstAndCaps(t *testing.T) {
+	var s State
+	for _, p := range []string{"/1", "/2", "/3", "/4", "/5"} {
+		updateState(&s, ev("path", map[string]any{"path": p}))
+		updateState(&s, ev("path.ok", map[string]any{"path": p}))
+	}
+	updateState(&s, ev("path", map[string]any{"path": "/busy"}))
+
+	require.Len(t, s.RecentPaths, maxRecentPaths)
+	require.Equal(t, RecentPath{Path: "/busy", Status: "in-progress"}, s.RecentPaths[0])
+	require.Equal(t, RecentPath{Path: "/5", Status: "ok"}, s.RecentPaths[1])
+}

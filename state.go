@@ -49,6 +49,8 @@ type State struct {
 
 	// Latest per-scope I/O, keyed by kloset iostat scope name; feeds Network.
 	IO map[string]IOScope `json:"io,omitzero"`
+
+	RecentPaths []RecentPath `json:"recent_paths,omitzero"`
 }
 
 type StateCounter struct {
@@ -95,6 +97,15 @@ type NetworkSample struct {
 	At               int64   `json:"at"`
 	ReadBytesPerSec  float64 `json:"read_bps,omitzero"`
 	WriteBytesPerSec float64 `json:"write_bps,omitzero"`
+}
+
+// maxRecentPaths caps RecentPaths: in-progress paths first, then the most
+// recently settled ones.
+const maxRecentPaths = 5
+
+type RecentPath struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
 }
 
 // processed fills the running items/bytes readout from the per-file counters,

@@ -1,6 +1,8 @@
 package plaklet
 
 import (
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -51,14 +53,10 @@ func (l *eventListener) State() State {
 	defer l.mu.Unlock()
 	s := l.state
 	s.Processed.Items, s.Processed.Bytes = s.processed()
-	// IO is a map (reference); copy it so the caller can send it without racing
-	// further mutations.
-	if l.state.IO != nil {
-		s.IO = make(map[string]IOScope, len(l.state.IO))
-		for k, v := range l.state.IO {
-			s.IO[k] = v
-		}
-	}
+	// IO and RecentPaths are references; copy them so the caller can send the
+	// state without racing further mutations.
+	s.IO = maps.Clone(l.state.IO)
+	s.RecentPaths = slices.Clone(l.state.RecentPaths)
 	return s
 }
 
@@ -71,12 +69,20 @@ func updateState(s *State, e events.Event) {
 
 	case "path":
 		s.Paths.Total++
+		pathName, _ := eventField[string](e, "path")
+		startRecentPath(s, pathName)
 	case "path.ok":
 		s.Paths.Ok++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "ok")
 	case "path.error":
 		s.Paths.Error++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "error")
 	case "path.cached":
 		s.Paths.Cached++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "ok")
 
 	case "directory":
 		s.Dirs.Total++
@@ -204,4 +210,43 @@ func ioDirFromEvent(e events.Event, key string) IODir {
 		Overall:     getf("overall"),
 		OverallWall: getf("overall_wall"),
 	}
+}
+
+// startRecentPath puts a path that started processing in front of RecentPaths.
+func startRecentPath(s *State, path string) {
+	inProgress := []RecentPath{{Path: path, Status: "in-progress"}}
+	var settled []RecentPath
+	for _, rp := range s.RecentPaths {
+		if rp.Status == "in-progress" {
+			inProgress = append(inProgress, rp)
+		} else {
+			settled = append(settled, rp)
+		}
+	}
+	s.RecentPaths = capRecentPaths(append(inProgress, settled...))
+}
+
+// settleRecentPath moves a path from in-progress to the head of the settled
+// ones, with its final status.
+func settleRecentPath(s *State, path string, status string) {
+	var inProgress []RecentPath
+	settled := []RecentPath{{Path: path, Status: status}}
+	for _, rp := range s.RecentPaths {
+		if rp.Path == path {
+			continue
+		}
+		if rp.Status == "in-progress" {
+			inProgress = append(inProgress, rp)
+		} else {
+			settled = append(settled, rp)
+		}
+	}
+	s.RecentPaths = capRecentPaths(append(inProgress, settled...))
+}
+
+func capRecentPaths(paths []RecentPath) []RecentPath {
+	if len(paths) > maxRecentPaths {
+		return paths[:maxRecentPaths]
+	}
+	return paths
 }
