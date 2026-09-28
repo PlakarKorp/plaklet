@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"bytes"
+	"crypto/rand"
 	"fmt"
 	"io"
 	"os"
@@ -34,9 +35,10 @@ func newTestContext(t *testing.T) *kcontext.KContext {
 	// must be drained for the duration of any op (main() does this via the
 	// listener). Drain and discard here.
 	bus := ctx.Events()
+	events := bus.Listen()
 	drained := make(chan struct{})
 	go func() {
-		for range bus.Listen() {
+		for range events {
 		}
 		close(drained)
 	}()
@@ -51,11 +53,19 @@ func newTestContext(t *testing.T) *kcontext.KContext {
 // createFSRepo initializes an unencrypted kloset store at dir.
 func createFSRepo(t *testing.T, ctx *kcontext.KContext, dir string) {
 	t.Helper()
+	createFSRepoWith(t, ctx, dir, nil)
+}
+
+func createFSRepoWith(t *testing.T, ctx *kcontext.KContext, dir string, tweak func(*storage.Configuration)) {
+	t.Helper()
 	st, err := storage.New(ctx, map[string]string{"location": "fs://" + dir})
 	require.NoError(t, err)
 
 	config := storage.NewConfiguration()
 	config.Encryption = nil
+	if tweak != nil {
+		tweak(config)
+	}
 	serialized, err := config.ToBytes()
 	require.NoError(t, err)
 
@@ -314,4 +324,49 @@ func TestIncrementalBackupDedups(t *testing.T) {
 	require.NotNil(t, chk.Check)
 	require.Len(t, chk.Check.Checks, 2)
 	require.Zero(t, chk.Check.Errors)
+}
+
+// TestBackupStateFromEvents runs a backup through the real event listener and
+// checks the state fields that only events carry.
+func TestBackupStateFromEvents(t *testing.T) {
+	srcDir := t.TempDir()
+	repoDir := filepath.Join(t.TempDir(), "repo")
+	for i := range 8 {
+		data := make([]byte, 64<<10)
+		_, _ = rand.Read(data)
+		require.NoError(t, os.WriteFile(filepath.Join(srcDir, fmt.Sprintf("f%d", i)), data, 0o644))
+	}
+
+	// kloset samples storage I/O only until the backup returns, before the
+	// commit. Small packfiles get written, and measured, inside that window.
+	createFSRepoWith(t, newTestContext(t), repoDir, func(c *storage.Configuration) {
+		c.Packfile.MaxSize = 32 << 10
+	})
+
+	cachedir := t.TempDir()
+	ctx := kcontext.NewKContext()
+	ctx.CacheDir = cachedir
+	ctx.MaxConcurrency = 4
+	ctx.SetLogger(logging.NewLogger(io.Discard, io.Discard))
+	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
+	t.Cleanup(func() { ctx.GetCache().Close() })
+
+	listener := newEventListener()
+	listener.Run(ctx.Events())
+
+	_, err := dispatch(ctx, &ExecPayload{
+		Op:     "backup",
+		Source: fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir),
+		Target: fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir),
+	})
+	require.NoError(t, err)
+	ctx.Events().Close()
+	listener.Wait()
+
+	st := listener.State()
+	require.NotEmpty(t, st.RecentPaths)
+	for _, rp := range st.RecentPaths {
+		require.NotEqual(t, "in-progress", rp.Status, rp.Path)
+	}
+	require.Positive(t, st.IO["storage"].Write.Latency.Count, "kloset should report storage write latency")
 }

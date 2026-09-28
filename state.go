@@ -1,6 +1,10 @@
 package plaklet
 
-import "github.com/PlakarKorp/kloset/events"
+import (
+	"time"
+
+	"github.com/PlakarKorp/kloset/events"
+)
 
 // State mirrors the subset of plakman's reporting.State that plaklet produces:
 // live progress counters, per-scope IO, and the CPU/RAM/throughput sample
@@ -42,6 +46,10 @@ type State struct {
 	// scopes.
 	Network []NetworkSample `json:"network,omitzero"`
 
+	// Write-latency series of the storage scope, for the operations that write
+	// to one.
+	Latency []LatencySample `json:"latency,omitzero"`
+
 	Processed struct {
 		Items uint64 `json:"items,omitzero"`
 		Bytes uint64 `json:"bytes,omitzero"`
@@ -49,6 +57,8 @@ type State struct {
 
 	// Latest per-scope I/O, keyed by kloset iostat scope name; feeds Network.
 	IO map[string]IOScope `json:"io,omitzero"`
+
+	RecentPaths []RecentPath `json:"recent_paths,omitzero"`
 }
 
 type StateCounter struct {
@@ -66,6 +76,20 @@ type IODir struct {
 	TotalBytes  int64   `json:"total,omitzero"`
 	Overall     float64 `json:"overall,omitzero"`
 	OverallWall float64 `json:"overall_wall,omitzero"`
+
+	Latency Latency `json:"latency,omitzero"`
+}
+
+// Latency is the distribution of operation durations in one direction of a
+// scope. kloset only observes successful packfile writes to the storage
+// backend; other scopes stay zero. The percentiles come from a histogram and
+// mean little below a few dozen operations, so read them against Count.
+type Latency struct {
+	Count int64         `json:"count,omitzero"`
+	Avg   time.Duration `json:"avg,omitzero"`
+	P50   time.Duration `json:"p50,omitzero"`
+	P95   time.Duration `json:"p95,omitzero"`
+	Max   time.Duration `json:"max,omitzero"`
 }
 
 type IOScope struct {
@@ -79,6 +103,7 @@ type IOScope struct {
 const (
 	MaxResourceSamples = 120
 	MaxNetworkSamples  = 120
+	MaxLatencySamples  = 120
 )
 
 // ResourceSample is one reading of this process's CPU%/RSS. Samples are not
@@ -95,6 +120,27 @@ type NetworkSample struct {
 	At               int64   `json:"at"`
 	ReadBytesPerSec  float64 `json:"read_bps,omitzero"`
 	WriteBytesPerSec float64 `json:"write_bps,omitzero"`
+}
+
+// maxRecentPaths caps RecentPaths: in-progress paths first, then the most
+// recently settled ones.
+const maxRecentPaths = 5
+
+type RecentPath struct {
+	Path   string `json:"path"`
+	Status string `json:"status"`
+}
+
+// LatencySample is one reading of the write-latency distribution, cumulative
+// over the run so far. Count only grows: a series stalled at one Count means
+// writes stopped completing. Plot against At (unix millis).
+type LatencySample struct {
+	At    int64         `json:"at"`
+	Count int64         `json:"count,omitzero"`
+	Avg   time.Duration `json:"avg,omitzero"`
+	P50   time.Duration `json:"p50,omitzero"`
+	P95   time.Duration `json:"p95,omitzero"`
+	Max   time.Duration `json:"max,omitzero"`
 }
 
 // processed fills the running items/bytes readout from the per-file counters,

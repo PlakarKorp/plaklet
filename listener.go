@@ -1,6 +1,8 @@
 package plaklet
 
 import (
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -28,9 +30,13 @@ func newEventListener() *eventListener {
 // blocks until the bus is closed.
 func (l *eventListener) Run(bus *events.EventsBUS) {
 	l.done = make(chan struct{})
+	// Listen creates the bus channel lazily and without locking, and emitters
+	// drop events until it exists. Create it before returning, not in the
+	// goroutine, so early events such as workflow.start are not lost.
+	events := bus.Listen()
 	go func() {
 		defer close(l.done)
-		for e := range bus.Listen() {
+		for e := range events {
 			l.mu.Lock()
 			updateState(&l.state, *e)
 			l.mu.Unlock()
@@ -47,14 +53,10 @@ func (l *eventListener) State() State {
 	defer l.mu.Unlock()
 	s := l.state
 	s.Processed.Items, s.Processed.Bytes = s.processed()
-	// IO is a map (reference); copy it so the caller can send it without racing
-	// further mutations.
-	if l.state.IO != nil {
-		s.IO = make(map[string]IOScope, len(l.state.IO))
-		for k, v := range l.state.IO {
-			s.IO[k] = v
-		}
-	}
+	// IO and RecentPaths are references; copy them so the caller can send the
+	// state without racing further mutations.
+	s.IO = maps.Clone(l.state.IO)
+	s.RecentPaths = slices.Clone(l.state.RecentPaths)
 	return s
 }
 
@@ -67,12 +69,20 @@ func updateState(s *State, e events.Event) {
 
 	case "path":
 		s.Paths.Total++
+		pathName, _ := eventField[string](e, "path")
+		startRecentPath(s, pathName)
 	case "path.ok":
 		s.Paths.Ok++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "ok")
 	case "path.error":
 		s.Paths.Error++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "error")
 	case "path.cached":
 		s.Paths.Cached++
+		pathName, _ := eventField[string](e, "path")
+		settleRecentPath(s, pathName, "ok")
 
 	case "directory":
 		s.Dirs.Total++
@@ -199,5 +209,63 @@ func ioDirFromEvent(e events.Event, key string) IODir {
 		TotalBytes:  int64(getf("total")),
 		Overall:     getf("overall"),
 		OverallWall: getf("overall_wall"),
+		Latency:     latencyFromDir(dir),
 	}
+}
+
+// latencyFromDir pulls the nested "latency" map of one iostats direction. The
+// bus carries Go values: durations as time.Duration, the count as int64.
+func latencyFromDir(dir map[string]any) Latency {
+	lat, _ := dir["latency"].(map[string]any)
+	getd := func(k string) time.Duration {
+		d, _ := lat[k].(time.Duration)
+		return d
+	}
+	count, _ := lat["count"].(int64)
+	return Latency{
+		Count: count,
+		Avg:   getd("avg"),
+		P50:   getd("p50"),
+		P95:   getd("p95"),
+		Max:   getd("max"),
+	}
+}
+
+// startRecentPath puts a path that started processing in front of RecentPaths.
+func startRecentPath(s *State, path string) {
+	inProgress := []RecentPath{{Path: path, Status: "in-progress"}}
+	var settled []RecentPath
+	for _, rp := range s.RecentPaths {
+		if rp.Status == "in-progress" {
+			inProgress = append(inProgress, rp)
+		} else {
+			settled = append(settled, rp)
+		}
+	}
+	s.RecentPaths = capRecentPaths(append(inProgress, settled...))
+}
+
+// settleRecentPath moves a path from in-progress to the head of the settled
+// ones, with its final status.
+func settleRecentPath(s *State, path string, status string) {
+	var inProgress []RecentPath
+	settled := []RecentPath{{Path: path, Status: status}}
+	for _, rp := range s.RecentPaths {
+		if rp.Path == path {
+			continue
+		}
+		if rp.Status == "in-progress" {
+			inProgress = append(inProgress, rp)
+		} else {
+			settled = append(settled, rp)
+		}
+	}
+	s.RecentPaths = capRecentPaths(append(inProgress, settled...))
+}
+
+func capRecentPaths(paths []RecentPath) []RecentPath {
+	if len(paths) > maxRecentPaths {
+		return paths[:maxRecentPaths]
+	}
+	return paths
 }

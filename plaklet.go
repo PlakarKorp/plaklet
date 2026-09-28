@@ -126,7 +126,7 @@ func Main(args []string) int {
 	listener := newEventListener()
 	listener.Run(ctx.Events())
 
-	// Sample CPU/memory and read/write throughput on a ticker and stream them as
+	// Sample CPU/memory, read/write throughput and write latency on a ticker and stream them as
 	// ReplyState, so the control plane gets a live resource/throughput graph.
 	stateStop := make(chan struct{})
 	stateDone := make(chan struct{})
@@ -134,6 +134,7 @@ func Main(args []string) int {
 		defer close(stateDone)
 		resources := newResourceSampler()
 		network := newNetworkSampler(input.Op)
+		latency := newLatencySampler(input.Op)
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 
@@ -141,9 +142,11 @@ func Main(args []string) int {
 			resources.sample()
 			st := listener.State()
 			network.sample(st.IO)
+			latency.sample(st.IO)
 			st.Resources = resources.snapshot()
 			st.NumCPU = resources.numCPU()
 			st.Network = network.snapshot()
+			st.Latency = latency.snapshot()
 			if raw, err := json.Marshal(&st); err == nil {
 				send(&ExecReply{Type: ReplyState, State: raw})
 			}
