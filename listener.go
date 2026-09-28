@@ -209,6 +209,25 @@ func ioDirFromEvent(e events.Event, key string) IODir {
 		TotalBytes:  int64(getf("total")),
 		Overall:     getf("overall"),
 		OverallWall: getf("overall_wall"),
+		Latency:     latencyFromDir(dir),
+	}
+}
+
+// latencyFromDir pulls the nested "latency" map of one iostats direction. The
+// bus carries Go values: durations as time.Duration, the count as int64.
+func latencyFromDir(dir map[string]any) Latency {
+	lat, _ := dir["latency"].(map[string]any)
+	getd := func(k string) time.Duration {
+		d, _ := lat[k].(time.Duration)
+		return d
+	}
+	count, _ := lat["count"].(int64)
+	return Latency{
+		Count: count,
+		Avg:   getd("avg"),
+		P50:   getd("p50"),
+		P95:   getd("p95"),
+		Max:   getd("max"),
 	}
 }
 
