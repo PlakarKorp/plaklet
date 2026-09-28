@@ -34,9 +34,10 @@ func newTestContext(t *testing.T) *kcontext.KContext {
 	// must be drained for the duration of any op (main() does this via the
 	// listener). Drain and discard here.
 	bus := ctx.Events()
+	events := bus.Listen()
 	drained := make(chan struct{})
 	go func() {
-		for range bus.Listen() {
+		for range events {
 		}
 		close(drained)
 	}()

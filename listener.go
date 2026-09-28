@@ -28,9 +28,13 @@ func newEventListener() *eventListener {
 // blocks until the bus is closed.
 func (l *eventListener) Run(bus *events.EventsBUS) {
 	l.done = make(chan struct{})
+	// Listen creates the bus channel lazily and without locking, and emitters
+	// drop events until it exists. Create it before returning, not in the
+	// goroutine, so early events such as workflow.start are not lost.
+	events := bus.Listen()
 	go func() {
 		defer close(l.done)
-		for e := range bus.Listen() {
+		for e := range events {
 			l.mu.Lock()
 			updateState(&l.state, *e)
 			l.mu.Unlock()
