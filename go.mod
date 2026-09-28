@@ -9,7 +9,7 @@ require (
 	github.com/PlakarKorp/integrations/ptar v1.1.0
 	github.com/PlakarKorp/integrations/stdio v1.1.0
 	github.com/PlakarKorp/integrations/tar v1.1.0
-	github.com/PlakarKorp/kloset v1.1.5
+	github.com/PlakarKorp/kloset v1.1.8
 	github.com/PlakarKorp/pkg v1.1.2
 	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.26.6
