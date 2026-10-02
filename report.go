@@ -102,6 +102,11 @@ type RmReport struct {
 	SnapshotIDs [][]byte `json:"snapshot_ids"`
 }
 
+type PruneReport struct {
+	Errors      uint64   `json:"errors"`
+	SnapshotIDs [][]byte `json:"snapshot_ids"`
+}
+
 // Report is the top-level object carried by a ReplyReport. Exactly one of the
 // operation-specific fields is set, matching Type.
 type Report struct {
@@ -111,4 +116,5 @@ type Report struct {
 	Restore *RestoreReport `json:"restore,omitempty"`
 	Sync    *SyncsReport   `json:"sync,omitempty"`
 	Rm      *RmReport      `json:"rm,omitempty"`
+	Prune   *PruneReport   `json:"prune,omitempty"`
 }
