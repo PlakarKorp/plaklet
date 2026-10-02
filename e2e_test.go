@@ -17,6 +17,7 @@ import (
 	"github.com/PlakarKorp/kloset/logging"
 	"github.com/PlakarKorp/kloset/resources"
 	"github.com/PlakarKorp/kloset/versioning"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -79,7 +80,7 @@ func createFSRepoWith(t *testing.T, ctx *kcontext.KContext, dir string, tweak fu
 	require.NoError(t, st.Close(ctx))
 }
 
-func fsConf(id, typ, location string) *Configuration {
+func fsConf(id uuid.UUID, typ, location string) *Configuration {
 	return &Configuration{
 		Id:          id,
 		Type:        typ,
@@ -98,11 +99,11 @@ func TestEndToEnd(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "b.txt"), []byte("world!!"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "skip.log"), []byte("noise"), 0o644))
 
-	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
-	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+	source := fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir)
+	store := fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir)
 	restoreDir := t.TempDir()
 	peerDir := filepath.Join(t.TempDir(), "peer")
-	peer := fsConf("44444444-4444-4444-4444-444444444444", "storage", peerDir)
+	peer := fsConf(uuid.MustParse("44444444-4444-4444-4444-444444444444"), "storage", peerDir)
 
 	// Each phase runs as a subtest so its context (and pebble cache) is torn down
 	// via t.Cleanup before the next phase begins, rather than all contexts piling
@@ -157,7 +158,7 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("restore", func(t *testing.T) {
 		ctx := newTestContext(t)
-		dest := fsConf("33333333-3333-3333-3333-333333333333", "exporter", restoreDir)
+		dest := fsConf(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "exporter", restoreDir)
 		// The stored restore config carries the latest flag in both forms: the
 		// task-level "latest" and the fold into "locate.filter.latest".
 		rep, err := dispatch(ctx, &ExecPayload{
@@ -204,8 +205,8 @@ func TestRmEndToEnd(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "repo")
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
 
-	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
-	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+	source := fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir)
+	store := fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir)
 
 	run := func(op string, cfg map[string]string, src, tgt *Configuration) *Report {
 		ctx := newTestContext(t)
@@ -246,7 +247,7 @@ func TestRmEndToEnd(t *testing.T) {
 // compression algorithm instead of always writing the default.
 func TestCreateHonoursCompression(t *testing.T) {
 	repoDir := filepath.Join(t.TempDir(), "repo")
-	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+	store := fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir)
 
 	ctx := newTestContext(t)
 	_, err := dispatch(ctx, &ExecPayload{
@@ -270,7 +271,7 @@ func TestCreateHonoursCompression(t *testing.T) {
 	_, err = dispatch(newTestContext(t), &ExecPayload{
 		Op:         "create",
 		TaskConfig: map[string]string{"compression": "bogus"},
-		Source:     fsConf("33333333-3333-3333-3333-333333333333", "storage", filepath.Join(t.TempDir(), "repo2")),
+		Source:     fsConf(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "storage", filepath.Join(t.TempDir(), "repo2")),
 	})
 	require.Error(t, err)
 }
@@ -294,8 +295,8 @@ func TestIncrementalBackupDedups(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "data.bin"),
 		bytes.Repeat([]byte("plaklet-incremental-"), 4096), 0o644))
 
-	source := fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir)
-	store := fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir)
+	source := fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir)
+	store := fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir)
 
 	run := func(op string, src, tgt *Configuration) *Report {
 		ctx := newTestContext(t)
@@ -356,8 +357,8 @@ func TestBackupStateFromEvents(t *testing.T) {
 
 	_, err := dispatch(ctx, &ExecPayload{
 		Op:     "backup",
-		Source: fsConf("11111111-1111-1111-1111-111111111111", "importer", srcDir),
-		Target: fsConf("22222222-2222-2222-2222-222222222222", "storage", repoDir),
+		Source: fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir),
+		Target: fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir),
 	})
 	require.NoError(t, err)
 	ctx.Events().Close()

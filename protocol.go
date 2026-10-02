@@ -46,7 +46,7 @@ type ExecReply struct {
 // values (secrets are resolved by the caller before the payload reaches
 // plaklet), so Provider is expected to be nil.
 type Configuration struct {
-	Id          string               `json:"id"`
+	Id          uuid.UUID            `json:"id"`
 	Revision    int                  `json:"revision"`
 	Type        string               `json:"type"`
 	Integration Integration          `json:"integration"`
@@ -59,9 +59,9 @@ type Configuration struct {
 }
 
 type Integration struct {
-	Id      string `json:"id"`
-	Name    string `json:"name"`
-	Version string `json:"version"`
+	Id      uuid.UUID `json:"id"`
+	Name    string    `json:"name"`
+	Version string    `json:"version"`
 }
 
 type ConfigurationField struct {

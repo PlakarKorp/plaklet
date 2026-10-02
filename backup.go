@@ -43,7 +43,7 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		Name:        "plaklet-" + time.Now().String(),
 		Tags:        tags,
 		Environment: input.Source.Environment,
-		Dataset:     input.Source.Id,
+		Dataset:     input.Source.Id.String(),
 		DataClasses: input.Source.DataClasses,
 		// After each checkpoint/commit writes a new state file, fold it into the
 		// repository's aggregated state. plakman does this via its cached daemon;
