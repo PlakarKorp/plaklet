@@ -4,8 +4,6 @@ import (
 	"maps"
 	"slices"
 	"time"
-
-	"github.com/PlakarKorp/kloset/events"
 )
 
 type State struct {
@@ -186,13 +184,6 @@ func (s *State) processed() (items, bytes uint64) {
 		items = s.Summary.Files
 	}
 	return
-}
-
-// eventField extracts a typed value from an event's Data map, returning the zero
-// value and false on a missing/mistyped key.
-func eventField[T any](e events.Event, key string) (T, bool) {
-	v, ok := e.Data[key].(T)
-	return v, ok
 }
 
 func (s State) Equal(other State) bool {
