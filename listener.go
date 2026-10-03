@@ -1,6 +1,8 @@
 package plaklet
 
 import (
+	"fmt"
+	"log"
 	"maps"
 	"slices"
 	"sync"
@@ -8,27 +10,31 @@ import (
 
 	"github.com/PlakarKorp/kloset/events"
 	"github.com/PlakarKorp/kloset/objects"
+	"github.com/dustin/go-humanize"
 )
 
-// eventListener consumes the kloset event bus and folds events into a live
+// EventListener consumes the kloset event bus and folds events into a live
 // State: progress counters, phase, per-scope IO. A background sampler reads
 // State() on a ticker to build the streamed state (see main.go). Draining the
 // bus is also what keeps kloset's importer from blocking on a full event
 // channel.
-type eventListener struct {
-	done chan struct{}
+type EventListener struct {
+	quiet bool
+	done  chan struct{}
 
 	mu    sync.Mutex
 	state State
 }
 
-func newEventListener() *eventListener {
-	return &eventListener{}
+func NewEventListener(quiet bool) *EventListener {
+	return &EventListener{
+		quiet: quiet,
+	}
 }
 
 // Run starts draining the bus in a goroutine. It returns immediately; Wait
 // blocks until the bus is closed.
-func (l *eventListener) Run(bus *events.EventsBUS) {
+func (l *EventListener) Run(bus *events.EventsBUS) {
 	l.done = make(chan struct{})
 	// Listen creates the bus channel lazily and without locking, and emitters
 	// drop events until it exists. Create it before returning, not in the
@@ -37,27 +43,90 @@ func (l *eventListener) Run(bus *events.EventsBUS) {
 	go func() {
 		defer close(l.done)
 		for e := range events {
-			l.mu.Lock()
-			updateState(&l.state, *e)
-			l.mu.Unlock()
+			l.handleEvent(e)
 		}
 	}()
 }
 
-func (l *eventListener) Wait() { <-l.done }
+func (l *EventListener) Wait() { <-l.done }
 
 // State returns a copy of the current state with the running processed counters
 // filled in.
-func (l *eventListener) State() State {
+func (l *EventListener) State() State {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	// The caller reads the returned state from another goroutine while events
+	// keep updating ours. Copying the struct shares the reference fields, so
+	// clone them: the caller owns what it gets back.
 	s := l.state
 	s.Processed.Items, s.Processed.Bytes = s.processed()
 	// IO and RecentPaths are references; copy them so the caller can send the
 	// state without racing further mutations.
 	s.IO = maps.Clone(l.state.IO)
 	s.RecentPaths = slices.Clone(l.state.RecentPaths)
+	// Other slices are backfilled after extracting the state.
 	return s
+}
+
+func (l *EventListener) handleEvent(e *events.Event) {
+	l.mu.Lock()
+	updateState(&l.state, *e)
+	l.mu.Unlock()
+
+	if l.quiet && e.Level == "info" {
+		return
+	}
+
+	switch e.Type {
+	case "path", "directory", "file", "symlink":
+		// ignore, displayed as either success or failure
+
+	case "path.error":
+		snapshotID := e.Snapshot
+		pathname, _ := eventField[string](*e, "path")
+		errorMessage, _ := eventField[error](*e, "error")
+		log.Printf("%x: KO %s: %s", snapshotID[:4], pathname, errorMessage)
+
+	case "path.ok":
+		snapshotID := e.Snapshot
+		pathname, _ := eventField[string](*e, "path")
+		log.Printf("%x: OK %s", snapshotID[:4], pathname)
+
+	case "object", "chunk":
+		// ignore, too verbose for stdio
+
+	case "object.ok", "chunk.ok":
+		// ignore, too verbose for stdio
+
+	case "object.error", "chunk.error":
+		snapshotID := e.Snapshot
+		mac, _ := eventField[objects.MAC](*e, "mac")
+		errorMessage, _ := eventField[error](*e, "error")
+		log.Printf("%x: KO object=%x: %s", snapshotID[:4], mac, errorMessage)
+
+	case "result":
+		snapshotID := e.Snapshot
+		duration := e.Data["duration"]
+		rb, _ := eventField[int64](*e, "rbytes")
+		wb, _ := eventField[int64](*e, "wbytes")
+		rbytes := humanize.IBytes(uint64(rb))
+		wbytes := humanize.IBytes(uint64(wb))
+		errors, _ := eventField[uint64](*e, "errors")
+
+		var errorStr string
+		if errors > 0 {
+			errorWord := "errors"
+			if errors == 1 {
+				errorWord = "error"
+			}
+			errorStr = fmt.Sprintf("with %d %s", errors, errorWord)
+		} else {
+			errorStr = "without errors"
+		}
+		log.Printf("%x: %s completed %s in %s (in: %s, out: %s)",
+			snapshotID[:4], e.Workflow, errorStr, duration, rbytes, wbytes)
+	}
 }
 
 func updateState(s *State, e events.Event) {
@@ -66,6 +135,7 @@ func updateState(s *State, e events.Event) {
 		if e.Snapshot != objects.NilMac {
 			s.SnapshotID = e.Snapshot.FormatHex()
 		}
+	case "workflow.end":
 
 	case "path":
 		s.Paths.Total++
@@ -157,6 +227,7 @@ func updateState(s *State, e events.Event) {
 
 	case "snapshot.import.start":
 		s.Phase = "processing"
+	case "snapshot.import.done":
 	case "snapshot.vfs.start":
 		s.Phase = "building VFS"
 	case "snapshot.vfs.end":
@@ -169,6 +240,9 @@ func updateState(s *State, e events.Event) {
 		s.Phase = "committing"
 
 	case "iostats":
+		// Per-scope I/O sampled by kloset's iostat.Sampler (~1s). Data: scope
+		// (string), r and w (each a map of iostat.IOStats fields). Keep the
+		// latest per scope; the network sampler resolves read/write per op.
 		scope, ok := eventField[string](e, "scope")
 		if !ok || scope == "" {
 			return
@@ -217,6 +291,10 @@ func ioDirFromEvent(e events.Event, key string) IODir {
 // bus carries Go values: durations as time.Duration, the count as int64.
 func latencyFromDir(dir map[string]any) Latency {
 	lat, _ := dir["latency"].(map[string]any)
+	if lat == nil {
+		// is it possible?
+		return Latency{}
+	}
 	getd := func(k string) time.Duration {
 		d, _ := lat[k].(time.Duration)
 		return d
@@ -268,4 +346,13 @@ func capRecentPaths(paths []RecentPath) []RecentPath {
 		return paths[:maxRecentPaths]
 	}
 	return paths
+}
+
+// eventField extracts a typed value from an event's Data map. It returns the
+// zero value and false when the key is missing or holds a different type, so
+// callers can skip a malformed event field instead of panicking on a bad type
+// assertion (events arrive from a separate process over the bus).
+func eventField[T any](e events.Event, key string) (T, bool) {
+	v, ok := e.Data[key].(T)
+	return v, ok
 }
