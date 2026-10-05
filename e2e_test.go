@@ -352,7 +352,7 @@ func TestBackupStateFromEvents(t *testing.T) {
 	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
 	t.Cleanup(func() { ctx.GetCache().Close() })
 
-	listener := newEventListener()
+	listener := NewEventListener(false)
 	listener.Run(ctx.Events())
 
 	_, err := dispatch(ctx, &ExecPayload{

@@ -123,7 +123,7 @@ func Main(args []string) int {
 	// The event listener drains kloset's event bus (also required to keep the
 	// importer from blocking on a full channel) and folds events into a live
 	// State.
-	listener := newEventListener()
+	listener := NewEventListener(quiet)
 	listener.Run(ctx.Events())
 
 	// Sample CPU/memory, read/write throughput and write latency on a ticker and stream them as
