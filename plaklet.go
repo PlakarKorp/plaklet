@@ -233,14 +233,20 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return backup(ctx, input)
 	case "check":
 		return check(ctx, input)
-	case "restore":
-		return restore(ctx, input)
-	case "sync":
-		return synchronize(ctx, input)
 	case "create":
 		return create(ctx, input)
+	case "maintenance":
+		return maintenance(ctx, input)
+	case "prune":
+		return prune(ctx, input)
+	case "restore":
+		return restore(ctx, input)
 	case "rm":
 		return rm(ctx, input)
+	case "sync":
+		return synchronize(ctx, input)
+	case "test":
+		return test(ctx, input)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
 	}
