@@ -10,4 +10,4 @@ import "log"
 
 func Info(string, ...any) {}
 
-func Warn(format string, args ...any) { log.Printf("plugin: WARN "+format, args...) }
+func Warn(format string, args ...any) { log.Printf("WARN: "+format, args...) }
