@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/PlakarKorp/pkg"
-	"github.com/PlakarKorp/plaklet/plugin/logging"
+	"github.com/PlakarKorp/plaklet/logging"
 )
 
 var (
