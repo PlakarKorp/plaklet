@@ -129,12 +129,42 @@ func Main(args []string) int {
 	// Sample CPU/memory, read/write throughput and write latency on a ticker and stream them as
 	// ReplyState, so the control plane gets a live resource/throughput graph.
 	stateStop := make(chan struct{})
-	stateDone := make(chan struct{})
-	go func() {
-		defer close(stateDone)
+	var wg sync.WaitGroup
+	wg.Go(StateSampler(input.Op, listener, stateStop, send))
+
+	report, err := dispatch(ctx, &input)
+
+	// Stop sampling, then close and drain the event bus.
+	close(stateStop)
+	wg.Wait()
+	ctx.Events().Close()
+	listener.Wait()
+
+	// listener.Wait() has drained every event, so the final State is complete
+	// and race-free here — safe to fold event-only errors into the verdict.
+	if err == nil {
+		err = terminalError(input.Op, report, listener.State())
+	}
+
+	if err != nil {
+		send(&ExecReply{Type: ReplyFailure, Message: fmt.Sprintf("%s failed: %s", input.Op, err)})
+		return 0
+	}
+
+	if report != nil {
+		if raw, merrr := json.Marshal(report); merrr == nil {
+			send(&ExecReply{Type: ReplyReport, Report: raw})
+		}
+	}
+	send(&ExecReply{Type: ReplySuccess})
+	return 0
+}
+
+func StateSampler(op string, listener *EventListener, stateStop <-chan struct{}, send func(*ExecReply)) func() {
+	return func() {
 		resources := newResourceSampler()
-		network := newNetworkSampler(input.Op)
-		latency := newLatencySampler(input.Op)
+		network := newNetworkSampler(op)
+		latency := newLatencySampler(op)
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 
@@ -161,34 +191,7 @@ func Main(args []string) int {
 				emit()
 			}
 		}
-	}()
-
-	report, err := dispatch(ctx, &input)
-
-	// Stop sampling, then close and drain the event bus.
-	close(stateStop)
-	<-stateDone
-	ctx.Events().Close()
-	listener.Wait()
-
-	// listener.Wait() has drained every event, so the final State is complete
-	// and race-free here — safe to fold event-only errors into the verdict.
-	if err == nil {
-		err = terminalError(input.Op, report, listener.State())
 	}
-
-	if err != nil {
-		send(&ExecReply{Type: ReplyFailure, Message: fmt.Sprintf("%s failed: %s", input.Op, err)})
-		return 0
-	}
-
-	if report != nil {
-		if raw, merrr := json.Marshal(report); merrr == nil {
-			send(&ExecReply{Type: ReplyReport, Report: raw})
-		}
-	}
-	send(&ExecReply{Type: ReplySuccess})
-	return 0
 }
 
 // terminalError decides whether a completed operation should fail the job, for
