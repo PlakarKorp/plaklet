@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 
+	fsExporter "github.com/PlakarKorp/integrations/fs/exporter"
+	fsImporter "github.com/PlakarKorp/integrations/fs/importer"
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/exporter"
 	"github.com/PlakarKorp/kloset/connectors/importer"
@@ -39,6 +41,11 @@ func mkimporter(ctx *kcontext.KContext, conf *Configuration) (importer.Importer,
 		CWD:             "/",
 		MaxConcurrency:  ctx.MaxConcurrency,
 	}
+
+	if conf.Integration.Name == "fs" {
+		return fsImporter.NewFSImporter(ctx, opts, "fs", conf.params())
+	}
+
 	if p, err := pluginFor(conf, pkg.ConnectorTypeImporter); err == nil {
 		return p.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
@@ -51,6 +58,11 @@ func mkimporter(ctx *kcontext.KContext, conf *Configuration) (importer.Importer,
 // falling back to kloset's compiled-in exporter registry (fs, stdio).
 func mkexporter(ctx *kcontext.KContext, conf *Configuration) (exporter.Exporter, error) {
 	opts := &connectors.Options{MaxConcurrency: ctx.MaxConcurrency}
+
+	if conf.Integration.Name == "fs" {
+		return fsExporter.NewFSExporter(ctx, opts, "fs", conf.params())
+	}
+
 	if p, err := pluginFor(conf, pkg.ConnectorTypeExporter); err == nil {
 		return p.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
