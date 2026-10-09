@@ -196,30 +196,37 @@ func StateSampler(op string, listener *EventListener, stateStop <-chan struct{},
 
 // terminalError decides whether a completed operation should fail the job, for
 // the operations whose failures surface only after the fact rather than as a
-// returned error. A backup or restore commits/returns nil even when it couldn't
-// read or write some entries; check tallies snapshot errors in its own report
-// and already returns an error itself. We treat any such error count as a job
-// failure — a partial run is not a clean success. state carries the per-entry
-// error counters folded from the (now fully drained) event bus, used for
-// restore whose failures live only in events. Mutates report to record the
-// count. Returns nil when the run is clean.
+// returned error.
 func terminalError(op string, report *Report, state State) error {
 	if report == nil {
 		return nil
 	}
 	switch op {
 	case "backup":
+		// A backup that couldn't read some files commits the snapshot but returns a
+		// nil error; the flag lives in the report and nothing downstream inspects
+		// it. Fail the job so a partial backup isn't reported as a clean success,
+		// matching check and restore.
 		if report.Backup != nil && report.Backup.Errors > 0 {
-			return fmt.Errorf("backup failed: %d file(s) could not be read", report.Backup.Errors)
+			return fmt.Errorf("%d file(s) could not be read", report.Backup.Errors)
 		}
 	case "restore":
-		if report.Restore != nil {
-			entryErrors := state.Paths.Error + state.Files.Error + state.Dirs.Error +
-				state.Symlinks.Error + state.Xattrs.Error
-			if entryErrors != 0 {
-				report.Restore.Errors = entryErrors
-				return fmt.Errorf("restore failed: %d entries could not be restored", entryErrors)
-			}
+		// listener.Wait() has drained every event, so the final state is complete
+		// and race-free here. Restore reports per-entry failures only as events and
+		// snapshot.Export returns a nil error even when some entries failed to
+		// export; fold those into the report and fail the job so a partial restore
+		// isn't reported as a success.
+		entryErrors := state.Paths.Error + state.Files.Error + state.Dirs.Error +
+			state.Symlinks.Error + state.Xattrs.Error
+		if entryErrors != 0 {
+			report.Restore.Errors = entryErrors
+			return fmt.Errorf("%d entries could not be restored", entryErrors)
+		}
+
+	case "sync":
+		// Fail the job if at least one snapshot synchronization failed.
+		if report.Sync != nil && report.Sync.Errors > 0 {
+			return fmt.Errorf("%d snapshot(s) could not be synchronized", report.Sync.Errors)
 		}
 	}
 	return nil
@@ -233,14 +240,20 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return backup(ctx, input)
 	case "check":
 		return check(ctx, input)
-	case "restore":
-		return restore(ctx, input)
-	case "sync":
-		return synchronize(ctx, input)
 	case "create":
 		return create(ctx, input)
+	case "maintenance":
+		return maintenance(ctx, input)
+	case "prune":
+		return prune(ctx, input)
+	case "restore":
+		return restore(ctx, input)
 	case "rm":
 		return rm(ctx, input)
+	case "sync":
+		return synchronize(ctx, input)
+	case "test":
+		return test(ctx, input)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
 	}
