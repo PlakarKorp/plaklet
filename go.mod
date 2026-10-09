@@ -4,13 +4,13 @@ go 1.26.0
 
 require (
 	github.com/PlakarKorp/integration-grpc v1.1.2
-	github.com/PlakarKorp/integrations/fs v1.1.8
+	github.com/PlakarKorp/integrations/fs v1.1.9
 	github.com/PlakarKorp/integrations/http v1.1.3
 	github.com/PlakarKorp/integrations/ptar v1.1.1
 	github.com/PlakarKorp/integrations/stdio v1.1.0
 	github.com/PlakarKorp/integrations/tar v1.1.1
 	github.com/PlakarKorp/kloset v1.1.8
-	github.com/PlakarKorp/pkg v1.1.7
+	github.com/PlakarKorp/pkg v1.1.8
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.26.6
