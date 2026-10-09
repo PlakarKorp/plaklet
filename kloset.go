@@ -7,6 +7,7 @@ import (
 
 	fsExporter "github.com/PlakarKorp/integrations/fs/exporter"
 	fsImporter "github.com/PlakarKorp/integrations/fs/importer"
+	fsStorage "github.com/PlakarKorp/integrations/fs/storage"
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/exporter"
 	"github.com/PlakarKorp/kloset/connectors/importer"
@@ -79,7 +80,13 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 	passphrase := params["passphrase"]
 	delete(params, "passphrase")
 
-	store, err := storage.New(ctx, params)
+	var store storage.Store
+	var err error
+	if conf.Integration.Name == "fs" {
+		store, err = fsStorage.NewStore(ctx, "fs", params)
+	} else {
+		store, err = storage.New(ctx, params)
+	}
 	if err != nil {
 		return nil, "", nil, err
 	}
