@@ -9,7 +9,7 @@ require (
 	github.com/PlakarKorp/integrations/ptar v1.1.1
 	github.com/PlakarKorp/integrations/stdio v1.1.0
 	github.com/PlakarKorp/integrations/tar v1.1.1
-	github.com/PlakarKorp/kloset v1.1.8
+	github.com/PlakarKorp/kloset v1.1.9-rc.0
 	github.com/PlakarKorp/pkg v1.1.8
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/uuid v1.6.0
