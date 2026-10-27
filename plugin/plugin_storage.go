@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	grpc_storage "github.com/PlakarKorp/integration-grpc/storage"
+	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/pkg"
@@ -34,7 +34,7 @@ func (plugin *Plugin) NewStorage(ktx *kcontext.KContext, proto string, params ma
 		return nil, err
 	}
 
-	store, err := grpc_storage.NewStorage(ktx, client, proto, params)
+	store, err := sdk.NewStorage(ktx, client, proto, params)
 	if err != nil {
 		conn.Close()
 		return nil, err

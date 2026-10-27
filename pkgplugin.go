@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	grpc_storage "github.com/PlakarKorp/integration-grpc/storage"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/kloset/location"
 	"github.com/PlakarKorp/pkg"
@@ -26,11 +25,7 @@ func registerStorage(name, version, proto string, flags location.Flags) error {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get plugin: %w", err)
 		}
-		client, _, err := p.Connect(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("failed to connect to plugin: %w", err)
-		}
-		return grpc_storage.NewStorage(ctx, client, s, config)
+		return p.NewStorage(ctx, proto, config)
 	})
 }
 

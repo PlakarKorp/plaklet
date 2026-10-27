@@ -1,9 +1,9 @@
 module github.com/PlakarKorp/plaklet
 
-go 1.26.0
+go 1.26.10
 
 require (
-	github.com/PlakarKorp/integration-grpc v1.1.2
+	github.com/PlakarKorp/integration-sdk v1.1.1
 	github.com/PlakarKorp/integrations/fs v1.1.9
 	github.com/PlakarKorp/integrations/http v1.1.3
 	github.com/PlakarKorp/integrations/ptar v1.1.1
@@ -78,7 +78,7 @@ require (
 	golang.org/x/exp v0.0.0-20260410095643-746e56fc9e2f // indirect
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/net v0.59.0 // indirect
-	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect

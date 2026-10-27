@@ -3,7 +3,7 @@ package plugin
 import (
 	"context"
 
-	grpc_importer "github.com/PlakarKorp/integration-grpc/importer"
+	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/importer"
 	"github.com/PlakarKorp/kloset/kcontext"
@@ -35,7 +35,7 @@ func (plugin *Plugin) NewImporter(ktx *kcontext.KContext, proto string, params m
 		return nil, err
 	}
 
-	imp, err := grpc_importer.NewImporter(ktx, client, opts, proto, params)
+	imp, err := sdk.NewImporter(ktx, client, opts, proto, params)
 	if err != nil {
 		conn.Close()
 		return nil, err
