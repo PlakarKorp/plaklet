@@ -176,19 +176,11 @@ type LatencySample struct {
 	Max   time.Duration `json:"max,omitzero"`
 }
 
-// processed fills the running items/bytes readout from the per-file counters,
-// falling back to the scan summary (check/export emit fs.summary; backup does
-// not).
+// processed fills the running items/bytes readout from the per-file counters.
+// The scan summary is the total to reach, not progress: a restore that wrote
+// nothing must not read as done.
 func (s *State) processed() (items, bytes uint64) {
-	items = s.Files.Ok + s.Files.Cached
-	bytes = s.Files.Size + s.Files.CachedSize
-	if bytes == 0 {
-		bytes = s.Summary.Size
-	}
-	if items == 0 {
-		items = s.Summary.Files
-	}
-	return
+	return s.Files.Ok + s.Files.Cached, s.Files.Size + s.Files.CachedSize
 }
 
 func (s State) Equal(other State) bool {
