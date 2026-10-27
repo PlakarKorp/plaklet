@@ -50,8 +50,8 @@ func (p *Plugin) key() pluginKey {
 	return makePluginKey(p.Name, p.Version, p.Type, p.Protocol)
 }
 
-func (p *Plugin) Connect(ctx context.Context) (grpc.ClientConnInterface, net.Conn, error) {
-	cmd := exec.CommandContext(ctx, p.Exec, p.Args...)
+func (p *Plugin) Connect() (grpc.ClientConnInterface, net.Conn, error) {
+	cmd := exec.Command(p.Exec, p.Args...)
 	cmd.Stderr = os.Stderr
 	conn, err := stdioconn.Spawn(cmd)
 	if err != nil {
