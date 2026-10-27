@@ -6,6 +6,8 @@ github.com/PlakarKorp/go-cdc-chunkers v1.1.0 h1:XJKDpvncPc7ZNo830Kk5MRqOhbCLi5Ga
 github.com/PlakarKorp/go-cdc-chunkers v1.1.0/go.mod h1:y7ag92JABKPBDoSOPwedssQ5NIOgjRm4Mu6yTBpmUMY=
 github.com/PlakarKorp/go-human2duration v0.1.6 h1:pRPAU3yX4ROV7RihXihPkwyjoQNI1lnemjAMFdWRwi8=
 github.com/PlakarKorp/go-human2duration v0.1.6/go.mod h1:1kg75kTlYCYURVyciaeO2GFdLgGDMhIfBTBpfydv1sk=
+github.com/PlakarKorp/go-inventory-sdk v1.1.2 h1:iJsHnX6GHQY+za9DzDFPZQtEpwEaqVwdEcdb97jLkkA=
+github.com/PlakarKorp/go-inventory-sdk v1.1.2/go.mod h1:42uReScbDc4DK4g2Y2zNOo3loxEM5xdlegmqfDZO40k=
 github.com/PlakarKorp/integration-grpc v1.1.2 h1:fSTa9fv3bFgRMkkbKHf3zeS3OapK3Jy2cYJxLK8qGWI=
 github.com/PlakarKorp/integration-grpc v1.1.2/go.mod h1:/QMbuiV5qJFUhYg/Xc98FVXa9tiH4dBCAKc5FwjMFXU=
 github.com/PlakarKorp/integrations/fs v1.1.9 h1:9RBSGKDynzDCAbkhZelaIYJLYfGkr5zh3IgEsWiHXlY=

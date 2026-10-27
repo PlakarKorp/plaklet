@@ -3,6 +3,7 @@ module github.com/PlakarKorp/plaklet
 go 1.26.0
 
 require (
+	github.com/PlakarKorp/go-inventory-sdk v1.1.2
 	github.com/PlakarKorp/integration-grpc v1.1.2
 	github.com/PlakarKorp/integrations/fs v1.1.9
 	github.com/PlakarKorp/integrations/http v1.1.3
