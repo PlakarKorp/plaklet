@@ -12,6 +12,10 @@ jobs:
   test:
     name: Go unit tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The kortex coverage upload authenticates with the job's OIDC token.
+      id-token: write
 
     steps:
       - name: Checkout
@@ -26,5 +30,38 @@ jobs:
       - name: Build
         run: go build ./...
 
+      # Run the tests producing both a coverage profile and a JUnit XML for
+      # kortex. A test failure must not abort the job, or the upload below
+      # would be skipped and we would lose the results that explain the
+      # failure: continue-on-error plus an explicit exit captures the outcome
+      # for the final step to re-surface.
       - name: Test
-        run: go test ./...
+        id: gotest
+        continue-on-error: true
+        run: |
+          go install github.com/jstemmer/go-junit-report/v2@latest
+          set -o pipefail
+          go test -coverprofile=coverage.out -covermode=atomic -json ./... \
+            | "$(go env GOPATH)/bin/go-junit-report" -parser gojson -set-exit-code > junit.xml
+          status=$?
+          echo "test_exit=$status" >> "$GITHUB_OUTPUT"
+          exit $status
+
+      # kortex gets the reports, sent by the uploader it serves (a public
+      # repository cannot use its action) with the job's OIDC token: no secret.
+      # A pull request from a fork gets no token and uploads nothing. Failing
+      # here is a warning, never a failed build.
+      - name: Upload coverage and test results to kortex
+        if: ${{ !cancelled() }}
+        run: |
+          if ! curl -fsSL --retry 3 https://kortex.plakar.io/dl/kortex-linux-amd64 -o "$RUNNER_TEMP/kortex"; then
+            echo "::warning title=kortex coverage upload::could not fetch the uploader"
+            exit 0
+          fi
+          chmod +x "$RUNNER_TEMP/kortex"
+          "$RUNNER_TEMP/kortex" coverage upload --url https://kortex.plakar.io coverage.out junit.xml
+
+      # Surface a genuine test failure now that the results have been uploaded.
+      - name: Fail if tests failed
+        if: ${{ steps.gotest.outputs.test_exit != '0' }}
+        run: exit 1
