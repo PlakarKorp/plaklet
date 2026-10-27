@@ -2,18 +2,18 @@ package plugin
 
 import (
 	"context"
+	"net"
 
-	grpc_importer "github.com/PlakarKorp/integration-grpc/importer"
+	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/importer"
-	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/pkg"
 )
 
 type ImporterPluginConn struct {
 	importer.Importer
 
-	conn ExitConn
+	conn net.Conn
 }
 
 func (c *ImporterPluginConn) Close(ctx context.Context) error {
@@ -25,17 +25,17 @@ func (c *ImporterPluginConn) Close(ctx context.Context) error {
 	return errConn
 }
 
-func (plugin *Plugin) NewImporter(ktx *kcontext.KContext, proto string, params map[string]string, opts *connectors.Options) (importer.Importer, error) {
+func (plugin *Plugin) NewImporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (importer.Importer, error) {
 	if plugin.Type != pkg.ConnectorTypeImporter {
 		return nil, ErrPluginTypeMismatch
 	}
 
-	client, conn, err := plugin.Connect(ktx.Context)
+	client, conn, err := plugin.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	imp, err := grpc_importer.NewImporter(ktx, client, opts, proto, params)
+	imp, err := sdk.NewImporter(ctx, client, opts, proto, params)
 	if err != nil {
 		conn.Close()
 		return nil, err

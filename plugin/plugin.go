@@ -2,11 +2,17 @@ package plugin
 
 import (
 	"context"
+	"fmt"
+	"net"
+	"os"
+	"os/exec"
 	"strings"
 
+	"github.com/PlakarKorp/integration-sdk/stdioconn"
 	"github.com/PlakarKorp/kloset/location"
 	"github.com/PlakarKorp/pkg"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Plugin struct {
@@ -44,6 +50,24 @@ func (p *Plugin) key() pluginKey {
 	return makePluginKey(p.Name, p.Version, p.Type, p.Protocol)
 }
 
-func (p *Plugin) Connect(ctx context.Context) (grpc.ClientConnInterface, ExitConn, error) {
-	return ConnectPlugin(ctx, p.Exec, p.Args)
+func (p *Plugin) Connect(ctx context.Context) (grpc.ClientConnInterface, net.Conn, error) {
+	cmd := exec.CommandContext(ctx, p.Exec, p.Args...)
+	cmd.Stderr = os.Stderr
+	conn, err := stdioconn.Spawn(cmd)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	clientConn, err := grpc.NewClient("127.0.0.1:0",
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithIdleTimeout(0),
+		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+			return conn, nil
+		}),
+	)
+	if err != nil {
+		conn.Close()
+		return nil, nil, fmt.Errorf("grpc client creation failed: %w", err)
+	}
+	return clientConn, conn, nil
 }
