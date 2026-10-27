@@ -6,7 +6,6 @@ import (
 	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors"
 	"github.com/PlakarKorp/kloset/connectors/exporter"
-	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/pkg"
 )
 
@@ -25,17 +24,17 @@ func (c *ExporterPluginConn) Close(ctx context.Context) error {
 	return errConn
 }
 
-func (plugin *Plugin) NewExporter(ktx *kcontext.KContext, proto string, params map[string]string, opts *connectors.Options) (exporter.Exporter, error) {
+func (plugin *Plugin) NewExporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (exporter.Exporter, error) {
 	if plugin.Type != pkg.ConnectorTypeExporter {
 		return nil, ErrPluginTypeMismatch
 	}
 
-	client, conn, err := plugin.Connect(ktx.Context)
+	client, conn, err := plugin.Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	exp, err := sdk.NewExporter(ktx, client, opts, proto, params)
+	exp, err := sdk.NewExporter(ctx, client, opts, proto, params)
 	if err != nil {
 		conn.Close()
 		return nil, err
