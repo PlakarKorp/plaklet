@@ -80,3 +80,31 @@ func (c *Configuration) params() map[string]string {
 	}
 	return m
 }
+
+// ReplyInventory carries one inventory entry in Report while the "inventory"
+// operation lists a provider. Additive: a driver that predates it drops the
+// unknown type.
+const ReplyInventory ReplyType = "inventory"
+
+// InventoryEntry is the wire form of integration-sdk's InventoryEntry, as
+// the "inventory" operation emits it. SOURCE OF TRUTH -- plakman decodes it
+// (github.com/PlakarKorp/plakman inventory/edge.go); keep the two in sync.
+type InventoryEntry struct {
+	Class     string              `json:"class"`
+	SubClass  string              `json:"subclass,omitempty"`
+	Tags      []string            `json:"tags,omitempty"`
+	URN       string              `json:"urn"`
+	Name      string              `json:"name"`
+	Region    string              `json:"region,omitempty"`
+	Service   string              `json:"service,omitempty"`
+	Resource  string              `json:"resource,omitempty"`
+	Details   []byte              `json:"details,omitempty"`
+	Endpoints []InventoryEndpoint `json:"endpoints,omitempty"`
+	Country   string              `json:"country,omitempty"`
+}
+
+type InventoryEndpoint struct {
+	Type       string            `json:"type"`
+	Endpoint   string            `json:"endpoint"`
+	Attributes map[string]string `json:"attributes,omitempty"`
+}

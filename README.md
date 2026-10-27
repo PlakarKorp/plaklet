@@ -42,6 +42,11 @@ plaklet reads a single `ExecPayload` object on stdin and writes a stream of
 Connector secrets are expected to be **already resolved** into literal field
 values before the payload reaches plaklet.
 
+`inventory` has no report: it streams one `{"type":"inventory","report":{…}}`
+reply per entry the provider lists (the `InventoryEntry` shape in
+[`protocol.go`](protocol.go)), then the terminal reply. The inventory plugin is
+loaded from `-pkg` like any connector.
+
 ## Operations
 
 | Op | Needs | Description |
@@ -52,6 +57,7 @@ values before the payload reaches plaklet.
 | `sync`    | source + target (both stores) | Copy snapshots from one store to another |
 | `create`  | source (a store) | Initialize a kloset store |
 | `rm`      | source (a store) | Remove the snapshots named by `task_config` |
+| `inventory` | source (an inventory) | List what a provider holds, one `inventory` reply per entry |
 
 `restore` and `sync` select snapshots via `task_config`: `snapshot` (a specific
 ID), `latest` (`"true"`), and `tags` (comma-separated). `restore` requires
