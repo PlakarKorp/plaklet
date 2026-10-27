@@ -11,6 +11,11 @@ type State struct {
 	SnapshotID string `json:"snapshot_id,omitzero"`
 	Phase      string `json:"phase,omitzero"`
 
+	// Error is why the operation failed, set on the final state only. The
+	// per-entry counters below cannot carry a failure that is not tied to a
+	// path, such as an exporter that never started.
+	Error string `json:"error,omitzero"`
+
 	Summary struct {
 		Exists      bool   `json:"exists,omitzero"`
 		Paths       uint64 `json:"paths,omitzero"`
@@ -190,6 +195,7 @@ func (s State) Equal(other State) bool {
 	return s.Version == other.Version &&
 		s.SnapshotID == other.SnapshotID &&
 		s.Phase == other.Phase &&
+		s.Error == other.Error &&
 		s.Summary == other.Summary &&
 		s.Paths == other.Paths &&
 		s.Dirs == other.Dirs &&

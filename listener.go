@@ -69,6 +69,13 @@ func (l *EventListener) State() State {
 	return s
 }
 
+// SetError records why the operation failed, for the states read afterwards.
+func (l *EventListener) SetError(err error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.state.Error = err.Error()
+}
+
 func (l *EventListener) handleEvent(e *events.Event) {
 	l.mu.Lock()
 	updateState(&l.state, *e)

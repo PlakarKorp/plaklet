@@ -134,9 +134,7 @@ func Main(args []string) int {
 
 	report, err := dispatch(ctx, &input)
 
-	// Stop sampling, then close and drain the event bus.
-	close(stateStop)
-	wg.Wait()
+	// Close and drain the event bus.
 	ctx.Events().Close()
 	listener.Wait()
 
@@ -145,6 +143,13 @@ func Main(args []string) int {
 	if err == nil {
 		err = terminalError(input.Op, report, listener.State())
 	}
+	if err != nil {
+		listener.SetError(err)
+	}
+
+	// Stop sampling only now, so the final state carries the verdict.
+	close(stateStop)
+	wg.Wait()
 
 	if err != nil {
 		send(&ExecReply{Type: ReplyFailure, Message: fmt.Sprintf("%s failed: %s", input.Op, err)})
