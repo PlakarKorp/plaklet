@@ -85,7 +85,10 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 	if conf.Integration.Name == "fs" {
 		store, err = fsStorage.NewStore(ctx, "fs", params)
 	} else {
-		store, err = storage.New(ctx, params)
+		var p *plugin.Plugin
+		if p, err = pluginFor(conf, pkg.ConnectorTypeStorage); err == nil {
+			store, err = p.NewStorage(ctx, protocolOf(conf), params)
+		}
 	}
 	if err != nil {
 		return nil, "", nil, err
