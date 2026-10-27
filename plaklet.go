@@ -132,7 +132,7 @@ func Main(args []string) int {
 	var wg sync.WaitGroup
 	wg.Go(StateSampler(input.Op, listener, stateStop, send))
 
-	report, err := dispatch(ctx, &input)
+	report, err := dispatch(ctx, &input, send)
 
 	// Stop sampling, then close and drain the event bus.
 	close(stateStop)
@@ -233,8 +233,9 @@ func terminalError(op string, report *Report, state State) error {
 }
 
 // dispatch routes an operation to its handler. Only the operations a remote edge
-// realistically runs are implemented; others return an explicit error.
-func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
+// realistically runs are implemented; others return an explicit error. send is
+// for the operations whose result is a stream rather than a report.
+func dispatch(ctx *kcontext.KContext, input *ExecPayload, send func(*ExecReply)) (*Report, error) {
 	switch input.Op {
 	case "backup":
 		return backup(ctx, input)
@@ -254,6 +255,8 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return synchronize(ctx, input)
 	case "test":
 		return test(ctx, input)
+	case "inventory":
+		return nil, listInventory(ctx, input, send)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
 	}
