@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"net"
 
 	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors"
@@ -12,7 +13,7 @@ import (
 type ImporterPluginConn struct {
 	importer.Importer
 
-	conn ExitConn
+	conn net.Conn
 }
 
 func (c *ImporterPluginConn) Close(ctx context.Context) error {

@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"net"
 	"strings"
 
 	"github.com/PlakarKorp/kloset/location"
@@ -44,6 +45,6 @@ func (p *Plugin) key() pluginKey {
 	return makePluginKey(p.Name, p.Version, p.Type, p.Protocol)
 }
 
-func (p *Plugin) Connect(ctx context.Context) (grpc.ClientConnInterface, ExitConn, error) {
+func (p *Plugin) Connect(ctx context.Context) (grpc.ClientConnInterface, net.Conn, error) {
 	return ConnectPlugin(ctx, p.Exec, p.Args)
 }

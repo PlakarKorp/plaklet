@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"context"
+	"net"
 
 	sdk "github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/connectors/storage"
@@ -11,7 +12,7 @@ import (
 type StoragePluginConn struct {
 	storage.Store
 
-	conn ExitConn
+	conn net.Conn
 }
 
 func (c *StoragePluginConn) Close(ctx context.Context) error {
