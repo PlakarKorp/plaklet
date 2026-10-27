@@ -178,9 +178,10 @@ type LatencySample struct {
 
 // processed fills the running items/bytes readout from the per-file counters.
 // The scan summary is the total to reach, not progress: a restore that wrote
-// nothing must not read as done.
+// nothing must not read as done. Failed files count as handled items, but
+// their bytes did not make it.
 func (s *State) processed() (items, bytes uint64) {
-	return s.Files.Ok + s.Files.Cached, s.Files.Size + s.Files.CachedSize
+	return s.Files.Ok + s.Files.Cached + s.Files.Error, s.Files.Size + s.Files.CachedSize
 }
 
 func (s State) Equal(other State) bool {

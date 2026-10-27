@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -83,6 +84,16 @@ func TestEventListenerProcessed(t *testing.T) {
 				e.FileOk("/a", objects.NewFileInfo("a", 8, 0o644, time.Time{}, 0, 0, 0, 0, 0))
 			},
 			wantItems: 1,
+			wantBytes: 8,
+		},
+		{
+			// a failed file was handled, but its bytes did not make it.
+			name: "failed files",
+			emit: func(e *events.Emitter) {
+				e.FileOk("/a", objects.NewFileInfo("a", 8, 0o644, time.Time{}, 0, 0, 0, 0, 0))
+				e.FileError("/b", errors.New("boom"))
+			},
+			wantItems: 2,
 			wantBytes: 8,
 		},
 	}
