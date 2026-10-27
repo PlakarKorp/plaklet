@@ -1,9 +1,12 @@
 package plaklet
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"runtime"
 	"strings"
+	"time"
 
 	fsExporter "github.com/PlakarKorp/integrations/fs/exporter"
 	fsImporter "github.com/PlakarKorp/integrations/fs/importer"
@@ -18,6 +21,12 @@ import (
 	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/plugin"
 )
+
+const closeDelay time.Duration = time.Minute
+
+type Closer interface {
+	Close(context.Context) error
+}
 
 // protocolOf extracts the protocol (scheme) from a configuration's location
 // field, e.g. "s3" from "s3://host/bucket".
@@ -123,4 +132,17 @@ func openrepo(ctx *kcontext.KContext, store storage.Store, passphrase string) (*
 	}
 
 	return repository.New(ctx, key, store, serializedConfig)
+}
+
+func ensureClose(closer Closer) {
+	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(ctx, closeDelay)
+	err := closer.Close(ctx)
+	switch {
+	case err == nil:
+		fmt.Fprintf(os.Stderr, "plaklet: %v: properly closed\n", closer)
+	default:
+		fmt.Fprintf(os.Stderr, "plaklet: %v: close failed: %s\n", closer, err)
+	}
+	cancel()
 }

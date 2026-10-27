@@ -54,7 +54,7 @@ func rm(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close(ctx)
+	defer ensureClose(store)
 
 	repo, err := openrepo(ctx, store, passphrase)
 	if err != nil {

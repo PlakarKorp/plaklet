@@ -26,13 +26,13 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer imp.Close(ctx)
+	defer ensureClose(imp)
 
 	store, passphrase, _, err := mkstorage(ctx, input.Target)
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close(ctx)
+	defer ensureClose(store)
 
 	repo, err := openrepo(ctx, store, passphrase)
 	if err != nil {

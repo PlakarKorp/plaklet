@@ -23,13 +23,13 @@ func restore(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer exp.Close(ctx)
+	defer ensureClose(exp)
 
 	store, passphrase, _, err := mkstorage(ctx, input.Source)
 	if err != nil {
 		return nil, err
 	}
-	defer store.Close(ctx)
+	defer ensureClose(store)
 
 	repo, err := openrepo(ctx, store, passphrase)
 	if err != nil {
