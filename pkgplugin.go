@@ -60,9 +60,5 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 // pluginFor resolves the loaded plugin backing a connector configuration, by its
 // integration name/version, connector type, and protocol (from the location).
 func pluginFor(conf *Configuration, connType pkg.ConnectorType) (*plugin.Plugin, error) {
-	proto := protocolOf(conf)
-	if proto == "" {
-		return nil, fmt.Errorf("could not determine protocol for %s", conf.Integration.Name)
-	}
-	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, proto)
+	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, protocolOf(conf))
 }
