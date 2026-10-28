@@ -28,7 +28,7 @@ func testStore(ctx *kcontext.KContext, target *Configuration) error {
 	if err != nil {
 		return err
 	}
-	defer store.Close(ctx)
+	defer ensureClose(store)
 
 	repo, err := openrepo(ctx, store, passphrase)
 	if err != nil {
@@ -45,7 +45,7 @@ func testSource(ctx *kcontext.KContext, target *Configuration) error {
 	if err != nil {
 		return err
 	}
-	defer importer.Close(ctx.Context) //nolint:errcheck
+	defer ensureClose(importer)
 
 	return importer.Ping(ctx)
 }
@@ -55,7 +55,7 @@ func testDestination(ctx *kcontext.KContext, target *Configuration) error {
 	if err != nil {
 		return err
 	}
-	defer exporter.Close(ctx.Context) //nolint:errcheck
+	defer ensureClose(exporter)
 
 	return exporter.Ping(ctx)
 }

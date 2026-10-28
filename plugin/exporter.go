@@ -30,7 +30,7 @@ func (plugin *Plugin) NewExporter(ctx context.Context, proto string, params map[
 		return nil, ErrPluginTypeMismatch
 	}
 
-	client, conn, err := plugin.Connect(ctx)
+	client, conn, err := plugin.Connect()
 	if err != nil {
 		return nil, err
 	}

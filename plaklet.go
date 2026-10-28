@@ -10,14 +10,17 @@
 package plaklet
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"runtime"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/PlakarKorp/kloset/caching"
@@ -131,6 +134,7 @@ func Main(args []string) int {
 	stateStop := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Go(StateSampler(input.Op, listener, stateStop, send))
+	wg.Go(CancelOnSignal(ctx.Cancel, stateStop))
 
 	report, err := dispatch(ctx, &input)
 
@@ -256,5 +260,20 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return test(ctx, input)
 	default:
 		return nil, fmt.Errorf("unsupported operation %q", input.Op)
+	}
+}
+
+func CancelOnSignal(cancel context.CancelCauseFunc, stateStop <-chan struct{}) func() {
+	return func() {
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		select {
+		case <-stateStop:
+			// normal termination
+			return
+		case sig := <-c:
+			fmt.Fprintf(os.Stderr, "plaklet: got signal %q, shutting down...\n", sig)
+			cancel(fmt.Errorf("got signal %s", sig))
+		}
 	}
 }
