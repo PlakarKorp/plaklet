@@ -69,24 +69,6 @@ func TestUpdateStateIostatsIgnoresMissingScope(t *testing.T) {
 	require.Nil(t, s.IO)
 }
 
-// processed() prefers per-file counters, falling back to the scan summary.
-func TestProcessedFallback(t *testing.T) {
-	// Counters present -> use them.
-	s := State{}
-	s.Files.Ok, s.Files.Size = 3, 300
-	s.Files.Cached, s.Files.CachedSize = 2, 200
-	items, bytes := s.processed()
-	require.Equal(t, uint64(5), items)
-	require.Equal(t, uint64(500), bytes)
-
-	// No counters -> fall back to summary.
-	s2 := State{}
-	s2.Summary.Files, s2.Summary.Size = 7, 700
-	items, bytes = s2.processed()
-	require.Equal(t, uint64(7), items)
-	require.Equal(t, uint64(700), bytes)
-}
-
 func TestEventFieldTypeMismatch(t *testing.T) {
 	e := ev("x", map[string]any{"n": "not-an-int"})
 	_, ok := eventField[int64](e, "n")

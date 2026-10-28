@@ -2,13 +2,17 @@ package plaklet
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/PlakarKorp/kloset/events"
+	"github.com/PlakarKorp/kloset/objects"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 )
 
 // The state sampler encodes the listener state from its own goroutine while
@@ -57,5 +61,56 @@ func TestEventListenerStateIsSafeToEncodeWhileEventsArrive(t *testing.T) {
 				continue
 			}
 		}
+	}
+}
+
+// Processed counts what was actually done. The scan summary is only the total,
+// so a restore whose exporter never wrote a file reads as zero, not as done.
+func TestEventListenerProcessed(t *testing.T) {
+	tests := []struct {
+		name      string
+		emit      func(e *events.Emitter)
+		wantItems uint64
+		wantBytes uint64
+	}{
+		{
+			name: "summary only",
+			emit: func(e *events.Emitter) { e.FilesystemSummary(3, 1, 0, 0, 24) },
+		},
+		{
+			name: "acked files",
+			emit: func(e *events.Emitter) {
+				e.FilesystemSummary(3, 1, 0, 0, 24)
+				e.FileOk("/a", objects.NewFileInfo("a", 8, 0o644, time.Time{}, 0, 0, 0, 0, 0))
+			},
+			wantItems: 1,
+			wantBytes: 8,
+		},
+		{
+			// a failed file was handled, but its bytes did not make it.
+			name: "failed files",
+			emit: func(e *events.Emitter) {
+				e.FileOk("/a", objects.NewFileInfo("a", 8, 0o644, time.Time{}, 0, 0, 0, 0, 0))
+				e.FileError("/b", errors.New("boom"))
+			},
+			wantItems: 2,
+			wantBytes: 8,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bus := events.NewEventsBUS(64)
+			listener := NewEventListener(true)
+			listener.Run(bus)
+
+			tt.emit(bus.NewRepositoryEmitter(uuid.Must(uuid.NewRandom()), "restore"))
+			bus.Close()
+			listener.Wait()
+
+			st := listener.State()
+			require.Equal(t, tt.wantItems, st.Processed.Items)
+			require.Equal(t, tt.wantBytes, st.Processed.Bytes)
+		})
 	}
 }
