@@ -30,7 +30,7 @@ func create(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ensureClose(store)
+	defer ensureClose(ctx, store)
 
 	cfg := storage.NewConfiguration()
 	switch {

@@ -133,9 +133,8 @@ func openrepo(ctx *kcontext.KContext, store storage.Store, passphrase string) (*
 	return repository.New(ctx, key, store, serializedConfig)
 }
 
-func ensureClose(closer Closer) {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, closeDelay)
+func ensureClose(ctx context.Context, closer Closer) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeDelay)
 	err := closer.Close(ctx)
 	if err != nil {
 		LogWarn("plaklet: %v: close failed: %s", closer, err)

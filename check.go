@@ -22,7 +22,7 @@ func check(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ensureClose(store)
+	defer ensureClose(ctx, store)
 
 	repo, err := openrepo(ctx, store, passphrase)
 	if err != nil {
