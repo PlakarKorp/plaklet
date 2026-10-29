@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/PlakarKorp/integration-sdk"
 	fsExporter "github.com/PlakarKorp/integrations/fs/exporter"
 	fsImporter "github.com/PlakarKorp/integrations/fs/importer"
 	fsStorage "github.com/PlakarKorp/integrations/fs/storage"
@@ -17,7 +18,6 @@ import (
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/repository"
-	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/plugin"
 )
 
@@ -55,7 +55,7 @@ func mkimporter(ctx *kcontext.KContext, conf *Configuration) (importer.Importer,
 		return fsImporter.NewFSImporter(ctx, opts, "fs", conf.params())
 	}
 
-	if p, err := pluginFor(conf, pkg.ConnectorTypeImporter); err == nil {
+	if p, err := pluginFor(conf, integration.ConnectorTypeImporter); err == nil {
 		return p.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
 		return nil, err
@@ -72,7 +72,7 @@ func mkexporter(ctx *kcontext.KContext, conf *Configuration) (exporter.Exporter,
 		return fsExporter.NewFSExporter(ctx, opts, "fs", conf.params())
 	}
 
-	if p, err := pluginFor(conf, pkg.ConnectorTypeExporter); err == nil {
+	if p, err := pluginFor(conf, integration.ConnectorTypeExporter); err == nil {
 		return p.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
 		return nil, err
@@ -94,7 +94,7 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 		store, err = fsStorage.NewStore(ctx, "fs", params)
 	} else {
 		var p *plugin.Plugin
-		if p, err = pluginFor(conf, pkg.ConnectorTypeStorage); err == nil {
+		if p, err = pluginFor(conf, integration.ConnectorTypeStorage); err == nil {
 			store, err = p.NewStorage(ctx, protocolOf(conf), params)
 		}
 	}

@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/PlakarKorp/integration-sdk"
+	"github.com/PlakarKorp/integration-sdk/location"
 	"github.com/PlakarKorp/integration-sdk/stdioconn"
-	"github.com/PlakarKorp/kloset/location"
-	"github.com/PlakarKorp/pkg"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -18,7 +18,7 @@ import (
 type Plugin struct {
 	Name     string
 	Version  string
-	Type     pkg.ConnectorType
+	Type     integration.ConnectorType
 	Protocol string
 	Flags    location.Flags
 	Exec     string
@@ -33,7 +33,7 @@ type PluginConnCloseError struct {
 
 type pluginKey string
 
-func makePluginKey(name, version string, conntype pkg.ConnectorType, protocol string) pluginKey {
+func makePluginKey(name, version string, conntype integration.ConnectorType, protocol string) pluginKey {
 	var b strings.Builder
 	b.WriteString(name)
 	b.WriteRune(':')
@@ -45,7 +45,7 @@ func makePluginKey(name, version string, conntype pkg.ConnectorType, protocol st
 	// Hack for now: For inventory and secret provider plugins, the protocol is
 	// just here for the manifest to be valid. We have to ignore it here for them
 	// to work. This probably has to be fixed at somt point.
-	if conntype == pkg.ConnectorTypeSecretProvider || conntype == pkg.ConnectorTypeInventory {
+	if conntype == integration.ConnectorTypeSecretProvider || conntype == integration.ConnectorTypeInventory {
 		protocol = ""
 	}
 	b.WriteString(protocol)

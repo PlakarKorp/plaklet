@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/PlakarKorp/integration-sdk"
+	"github.com/PlakarKorp/integration-sdk/location"
 	"github.com/PlakarKorp/kloset/connectors/storage"
-	"github.com/PlakarKorp/kloset/location"
 	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/plugin"
 )
@@ -17,11 +18,10 @@ import (
 // hybrid model plakman's executor uses.
 var pluginRegistry = plugin.NewRegistry()
 
-// registerStorage wires a storage plugin into kloset's storage registry so
 // storage.New(proto, ...) dispatches to the gRPC plugin.
 func registerStorage(name, version, proto string, flags location.Flags) error {
-	return storage.Register(proto, flags, func(ctx context.Context, s string, config map[string]string) (storage.Store, error) {
-		p, err := pluginRegistry.GetPlugin(name, version, pkg.ConnectorTypeStorage, proto)
+	return storage.Register(proto, flags, func(ctx context.Context, s string, config map[string]string) (integration.Store, error) {
+		p, err := pluginRegistry.GetPlugin(name, version, integration.ConnectorTypeStorage, proto)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get plugin: %w", err)
 		}
@@ -38,7 +38,7 @@ func pkgLoadHook(m *pkg.Manifest, p *pkg.Package, pkgdir string) {
 	}
 	for _, conn := range m.Connectors {
 		for _, proto := range conn.Protocols {
-			if conn.Type == pkg.ConnectorTypeStorage {
+			if conn.Type == integration.ConnectorTypeStorage {
 				flags, _ := conn.Flags()
 				_ = registerStorage(m.Name, p.Version, proto, flags)
 			}
@@ -50,7 +50,7 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 	pluginRegistry.UnregisterPlugins(m, p)
 	for _, conn := range m.Connectors {
 		for _, proto := range conn.Protocols {
-			if conn.Type == pkg.ConnectorTypeStorage {
+			if conn.Type == integration.ConnectorTypeStorage {
 				storage.Unregister(proto)
 			}
 		}
@@ -59,6 +59,6 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 
 // pluginFor resolves the loaded plugin backing a connector configuration, by its
 // integration name/version, connector type, and protocol (from the location).
-func pluginFor(conf *Configuration, connType pkg.ConnectorType) (*plugin.Plugin, error) {
+func pluginFor(conf *Configuration, connType integration.ConnectorType) (*plugin.Plugin, error) {
 	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, protocolOf(conf))
 }
