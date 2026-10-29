@@ -17,12 +17,7 @@ type ExporterPluginConn struct {
 }
 
 func (c *ExporterPluginConn) Close(ctx context.Context) error {
-	err := c.Exporter.Close(ctx)
-	errConn := c.conn.Close()
-	if err != nil {
-		return err
-	}
-	return errConn
+	return closePluginConn(ctx, "importer", c.Exporter.Close, c.conn)
 }
 
 func (plugin *Plugin) NewExporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (exporter.Exporter, error) {
