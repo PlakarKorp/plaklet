@@ -30,6 +30,8 @@ import (
 	"github.com/PlakarKorp/pkg"
 )
 
+var doLog func(ReplyType, string, []any)
+
 // indexedList reads a flattened string list from a task config: the control
 // plane flattens []string values as "key.0", "key.1", ... (see plakman's
 // flatten.PutStringList). Stops at the first missing index.
@@ -112,6 +114,14 @@ func Main(args []string) int {
 		sendMu.Lock()
 		_ = enc.Encode(r)
 		sendMu.Unlock()
+	}
+
+	doLog = func(level ReplyType, format string, args []any) {
+		msg := format
+		if len(args) > 0 {
+			msg = fmt.Sprintf(format, args...)
+		}
+		send(&ExecReply{Type: level, Message: msg})
 	}
 
 	var input ExecPayload
@@ -275,8 +285,20 @@ func CancelOnSignal(cancel context.CancelCauseFunc, stateStop <-chan struct{}) f
 			// normal termination
 			return
 		case sig := <-c:
-			fmt.Fprintf(os.Stderr, "plaklet: got signal %q, shutting down...\n", sig)
+			LogInfo("plaklet: got signal %q, shutting down...", sig)
 			cancel(fmt.Errorf("got signal %s", sig))
 		}
 	}
+}
+
+func LogInfo(format string, args ...any) {
+	doLog(ReplyInfo, format, args)
+}
+
+func LogWarn(format string, args ...any) {
+	doLog(ReplyWarning, format, args)
+}
+
+func LogError(format string, args ...any) {
+	doLog(ReplyError, format, args)
 }
