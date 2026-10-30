@@ -25,6 +25,12 @@ type Plugin struct {
 	Args     []string
 }
 
+type PluginConnCloseError struct {
+	Name         string
+	CloseErr     error
+	ConnCloseErr error
+}
+
 type pluginKey string
 
 func makePluginKey(name, version string, conntype pkg.ConnectorType, protocol string) pluginKey {
@@ -70,4 +76,27 @@ func (p *Plugin) Connect() (grpc.ClientConnInterface, net.Conn, error) {
 		return nil, nil, fmt.Errorf("grpc client creation failed: %w", err)
 	}
 	return clientConn, conn, nil
+}
+
+func (e PluginConnCloseError) Error() string {
+	closeErr := "ok"
+	connErr := "ok"
+	if e.CloseErr != nil {
+		closeErr = e.CloseErr.Error()
+	}
+	if e.ConnCloseErr != nil {
+		connErr = e.ConnCloseErr.Error()
+	}
+	return fmt.Sprintf("%s: [close:%s] [conn:%s]", e.Name, closeErr, connErr)
+}
+
+func closePluginConn(ctx context.Context, name string, closeFn func(context.Context) error, conn net.Conn) error {
+	var err PluginConnCloseError
+	err.Name = name
+	err.CloseErr = closeFn(ctx)
+	err.ConnCloseErr = conn.Close()
+	if err.CloseErr != nil || err.ConnCloseErr != nil {
+		return err
+	}
+	return nil
 }

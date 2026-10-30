@@ -3,7 +3,6 @@ package plaklet
 import (
 	"context"
 	"fmt"
-	"os"
 	"runtime"
 	"strings"
 	"time"
@@ -134,15 +133,11 @@ func openrepo(ctx *kcontext.KContext, store storage.Store, passphrase string) (*
 	return repository.New(ctx, key, store, serializedConfig)
 }
 
-func ensureClose(closer Closer) {
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, closeDelay)
+func ensureClose(ctx context.Context, closer Closer) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), closeDelay)
 	err := closer.Close(ctx)
-	switch {
-	case err == nil:
-		fmt.Fprintf(os.Stderr, "plaklet: %v: properly closed\n", closer)
-	default:
-		fmt.Fprintf(os.Stderr, "plaklet: %v: close failed: %s\n", closer, err)
+	if err != nil {
+		LogWarn("plaklet: %v: close failed: %s", closer, err)
 	}
 	cancel()
 }

@@ -17,12 +17,7 @@ type ImporterPluginConn struct {
 }
 
 func (c *ImporterPluginConn) Close(ctx context.Context) error {
-	err := c.Importer.Close(ctx)
-	errConn := c.conn.Close()
-	if err != nil {
-		return err
-	}
-	return errConn
+	return closePluginConn(ctx, "importer", c.Importer.Close, c.conn)
 }
 
 func (plugin *Plugin) NewImporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (importer.Importer, error) {

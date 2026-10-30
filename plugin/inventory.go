@@ -16,12 +16,7 @@ type InventoryPluginConn struct {
 }
 
 func (c *InventoryPluginConn) Close(ctx context.Context) error {
-	err := c.Inventory.Close(ctx)
-	errConn := c.conn.Close()
-	if err != nil {
-		return err
-	}
-	return errConn
+	return closePluginConn(ctx, "inventory", c.Inventory.Close, c.conn)
 }
 
 func (plugin *Plugin) NewInventory(ctx context.Context, proto string, params map[string]string) (integration.Inventory, error) {

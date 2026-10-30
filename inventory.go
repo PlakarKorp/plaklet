@@ -34,7 +34,7 @@ func listInventory(ctx *kcontext.KContext, input *ExecPayload, send func(*ExecRe
 	if err != nil {
 		return fmt.Errorf("start inventory plugin %s: %w", input.Source.Integration.Name, err)
 	}
-	defer ensureClose(inv)
+	defer ensureClose(ctx, inv)
 
 	return streamEntries(ctx.Context, inv, send)
 }

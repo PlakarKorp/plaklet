@@ -16,12 +16,7 @@ type StoragePluginConn struct {
 }
 
 func (c *StoragePluginConn) Close(ctx context.Context) error {
-	err := c.Store.Close(ctx)
-	errConn := c.conn.Close()
-	if err != nil {
-		return err
-	}
-	return errConn
+	return closePluginConn(ctx, "store", c.Store.Close, c.conn)
 }
 
 func (plugin *Plugin) NewStorage(ctx context.Context, proto string, params map[string]string) (storage.Store, error) {

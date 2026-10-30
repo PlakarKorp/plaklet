@@ -23,7 +23,7 @@ func synchronize(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ensureClose(srcStore)
+	defer ensureClose(ctx, srcStore)
 
 	srcRepo, err := openrepo(ctx, srcStore, srcPass)
 	if err != nil {
@@ -34,7 +34,7 @@ func synchronize(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer ensureClose(dstStore)
+	defer ensureClose(ctx, dstStore)
 
 	dstRepo, err := openrepo(ctx, dstStore, dstPass)
 	if err != nil {
