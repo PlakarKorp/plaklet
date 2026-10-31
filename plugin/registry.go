@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/PlakarKorp/integration-sdk"
 	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/logging"
 )
@@ -39,7 +40,7 @@ func (registry *Registry) ListPlugins() iter.Seq2[*Plugin, error] {
 	}
 }
 
-func (registry *Registry) GetPlugin(name, version string, conntype pkg.ConnectorType, protocol string) (*Plugin, error) {
+func (registry *Registry) GetPlugin(name, version string, conntype integration.ConnectorType, protocol string) (*Plugin, error) {
 	registry.mtx.Lock()
 	defer registry.mtx.Unlock()
 

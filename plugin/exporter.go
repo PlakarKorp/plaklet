@@ -4,14 +4,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/PlakarKorp/integration-sdk"
 	sdk "github.com/PlakarKorp/integration-sdk/client"
-	"github.com/PlakarKorp/kloset/connectors"
-	"github.com/PlakarKorp/kloset/connectors/exporter"
-	"github.com/PlakarKorp/pkg"
 )
 
 type ExporterPluginConn struct {
-	exporter.Exporter
+	integration.Exporter
 
 	conn net.Conn
 }
@@ -20,8 +18,8 @@ func (c *ExporterPluginConn) Close(ctx context.Context) error {
 	return closePluginConn(ctx, "importer", c.Exporter.Close, c.conn)
 }
 
-func (plugin *Plugin) NewExporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (exporter.Exporter, error) {
-	if plugin.Type != pkg.ConnectorTypeExporter {
+func (plugin *Plugin) NewExporter(ctx context.Context, proto string, params map[string]string, opts *integration.Options) (integration.Exporter, error) {
+	if plugin.Type != integration.ConnectorTypeExporter {
 		return nil, ErrPluginTypeMismatch
 	}
 
