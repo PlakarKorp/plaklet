@@ -2,12 +2,16 @@ package plaklet
 
 import (
 	"fmt"
+	"os"
 	"time"
 
+	"github.com/PlakarKorp/kloset/location"
 	"github.com/PlakarKorp/kloset/kcontext"
+	"github.com/PlakarKorp/kloset/locate"
 	"github.com/PlakarKorp/kloset/objects"
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/kloset/snapshot"
+	"github.com/PlakarKorp/kloset/snapshot/vfs"
 )
 
 // backup runs a source -> store backup, mirroring the plakman executor's backup
@@ -68,6 +72,44 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	if err := source.SetExcludes(ignores); err != nil {
 		return nil, err
 	}
+
+	var parentVFS *vfs.Filesystem
+	if imp.Flags()&location.FLAG_NOCACHE == 0 {
+		parentID, _, err := locate.Match(repo, &locate.LocateOptions{
+			Filters: locate.LocateFilters{
+				Latest: true,
+				Roots: []string{
+					source.Root(),
+				},
+				Types: []string{
+					source.Type(),
+				},
+				Origins: []string{
+					source.Origin(),
+				},
+			},
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		if len(parentID) != 0 {
+			parent, err := snapshot.Load(repo, parentID[0])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to load parent snapshot %x: %s\n", parentID[0], err)
+			} else {
+				defer parent.Close()
+
+				parentVFS, err = parent.FilesystemWithCache()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Failed to get parent VFS for snapshot %x: %s\n", parentID[0], err)
+				}
+			}
+		}
+	}
+
+	snap.WithVFSCache(parentVFS)
+
 
 	if err := snap.Backup(source); err != nil {
 		return nil, err
