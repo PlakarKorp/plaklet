@@ -9,7 +9,7 @@ require (
 	github.com/PlakarKorp/integrations/ptar v1.1.2
 	github.com/PlakarKorp/integrations/stdio v1.1.1
 	github.com/PlakarKorp/integrations/tar v1.1.2
-	github.com/PlakarKorp/kloset v1.1.10
+	github.com/PlakarKorp/kloset v1.2.0-alpha.2.0.20261102102127-4709e4ac333d
 	github.com/PlakarKorp/pkg v1.1.11
 	github.com/dustin/go-humanize v1.1.0
 	github.com/google/uuid v1.6.0
@@ -20,6 +20,7 @@ require (
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
+	github.com/PlakarKorp/aes-gcm-siv v0.1.0 // indirect
 	github.com/PlakarKorp/go-cdc-chunkers v1.1.0 // indirect
 	github.com/PlakarKorp/go-human2duration v0.1.6 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
@@ -34,6 +35,8 @@ require (
 	github.com/cockroachdb/swiss v0.0.0-20260820225851-333444432258 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391 // indirect
+	github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.16 // indirect
 	github.com/getsentry/sentry-go v0.35.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
@@ -63,7 +66,6 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/tink-crypto/tink-go/v2 v2.6.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
