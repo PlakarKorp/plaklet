@@ -9,17 +9,18 @@ require (
 	github.com/PlakarKorp/integrations/ptar v1.1.1
 	github.com/PlakarKorp/integrations/stdio v1.1.0
 	github.com/PlakarKorp/integrations/tar v1.1.1
-	github.com/PlakarKorp/kloset v1.1.13
+	github.com/PlakarKorp/kloset v1.1.15
 	github.com/PlakarKorp/pkg v1.1.8
 	github.com/dustin/go-humanize v1.0.1
 	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.26.6
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	google.golang.org/grpc v1.84.0
 )
 
 require (
 	github.com/DataDog/zstd v1.5.7 // indirect
+	github.com/PlakarKorp/aes-gcm-siv v0.0.0-20260921114103-b2704f58f4a4 // indirect
 	github.com/PlakarKorp/go-cdc-chunkers v1.1.0 // indirect
 	github.com/PlakarKorp/go-human2duration v0.1.6 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
@@ -33,8 +34,9 @@ require (
 	github.com/cockroachdb/redact v1.1.6 // indirect
 	github.com/cockroachdb/swiss v0.0.0-20260820225851-333444432258 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb // indirect
-	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/ericlagergren/polyval v0.0.0-20220411101811-e25bc10ba391 // indirect
+	github.com/ericlagergren/subtle v0.0.0-20220507045147-890d697da010 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect
 	github.com/getsentry/sentry-go v0.35.1 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
@@ -57,7 +59,6 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.29 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/xattr v0.4.12 // indirect
-	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/prometheus/client_golang v1.23.2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
@@ -65,7 +66,6 @@ require (
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/tink-crypto/tink-go/v2 v2.6.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.4.1 // indirect
@@ -84,7 +84,6 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
