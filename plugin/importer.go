@@ -4,14 +4,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/PlakarKorp/integration-sdk"
 	sdk "github.com/PlakarKorp/integration-sdk/client"
-	"github.com/PlakarKorp/kloset/connectors"
-	"github.com/PlakarKorp/kloset/connectors/importer"
-	"github.com/PlakarKorp/pkg"
 )
 
 type ImporterPluginConn struct {
-	importer.Importer
+	integration.Importer
 
 	conn net.Conn
 }
@@ -20,8 +18,8 @@ func (c *ImporterPluginConn) Close(ctx context.Context) error {
 	return closePluginConn(ctx, "importer", c.Importer.Close, c.conn)
 }
 
-func (plugin *Plugin) NewImporter(ctx context.Context, proto string, params map[string]string, opts *connectors.Options) (importer.Importer, error) {
-	if plugin.Type != pkg.ConnectorTypeImporter {
+func (plugin *Plugin) NewImporter(ctx context.Context, proto string, params map[string]string, opts *integration.Options) (integration.Importer, error) {
+	if plugin.Type != integration.ConnectorTypeImporter {
 		return nil, ErrPluginTypeMismatch
 	}
 

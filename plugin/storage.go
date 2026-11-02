@@ -4,13 +4,12 @@ import (
 	"context"
 	"net"
 
+	"github.com/PlakarKorp/integration-sdk"
 	sdk "github.com/PlakarKorp/integration-sdk/client"
-	"github.com/PlakarKorp/kloset/connectors/storage"
-	"github.com/PlakarKorp/pkg"
 )
 
 type StoragePluginConn struct {
-	storage.Store
+	integration.Store
 
 	conn net.Conn
 }
@@ -19,8 +18,8 @@ func (c *StoragePluginConn) Close(ctx context.Context) error {
 	return closePluginConn(ctx, "store", c.Store.Close, c.conn)
 }
 
-func (plugin *Plugin) NewStorage(ctx context.Context, proto string, params map[string]string) (storage.Store, error) {
-	if plugin.Type != pkg.ConnectorTypeStorage {
+func (plugin *Plugin) NewStorage(ctx context.Context, proto string, params map[string]string) (integration.Store, error) {
+	if plugin.Type != integration.ConnectorTypeStorage {
 		return nil, ErrPluginTypeMismatch
 	}
 

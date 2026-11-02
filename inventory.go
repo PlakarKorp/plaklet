@@ -6,13 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	sdk "github.com/PlakarKorp/integration-sdk"
+	"github.com/PlakarKorp/integration-sdk"
 	"github.com/PlakarKorp/kloset/kcontext"
-	"github.com/PlakarKorp/pkg"
 )
 
-func mkinventory(ctx *kcontext.KContext, conf *Configuration) (sdk.Inventory, error) {
-	p, err := pluginFor(conf, pkg.ConnectorTypeInventory)
+func mkinventory(ctx *kcontext.KContext, conf *Configuration) (integration.Inventory, error) {
+	p, err := pluginFor(conf, integration.ConnectorTypeInventory)
 	if err != nil {
 		return nil, err
 	}
@@ -43,11 +42,11 @@ func listInventory(ctx *kcontext.KContext, input *ExecPayload, send func(*ExecRe
 // provider ends on fails the listing, a provider that does not sync included:
 // the driver imports what it received as the inventory's new state, and an
 // empty success would empty the inventory.
-func streamEntries(ctx context.Context, inv sdk.Inventory, send func(*ExecReply)) error {
+func streamEntries(ctx context.Context, inv integration.Inventory, send func(*ExecReply)) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	entries := make(chan *sdk.InventoryEntry)
+	entries := make(chan *integration.InventoryEntry)
 	done := make(chan error, 1)
 	go func() {
 		defer close(done)
@@ -73,7 +72,7 @@ func streamEntries(ctx context.Context, inv sdk.Inventory, send func(*ExecReply)
 	return err
 }
 
-func wireEntry(e *sdk.InventoryEntry) *InventoryEntry {
+func wireEntry(e *integration.InventoryEntry) *InventoryEntry {
 	entry := &InventoryEntry{
 		Class:    string(e.Class),
 		SubClass: string(e.SubClass),

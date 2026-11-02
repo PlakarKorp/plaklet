@@ -6,7 +6,6 @@ import (
 
 	"github.com/PlakarKorp/integration-sdk"
 	sdk "github.com/PlakarKorp/integration-sdk/client"
-	"github.com/PlakarKorp/pkg"
 )
 
 type InventoryPluginConn struct {
@@ -20,7 +19,7 @@ func (c *InventoryPluginConn) Close(ctx context.Context) error {
 }
 
 func (plugin *Plugin) NewInventory(ctx context.Context, proto string, params map[string]string) (integration.Inventory, error) {
-	if plugin.Type != pkg.ConnectorTypeInventory {
+	if plugin.Type != integration.ConnectorTypeInventory {
 		return nil, ErrPluginTypeMismatch
 	}
 
