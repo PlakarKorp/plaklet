@@ -156,8 +156,9 @@ func Main(args []string) int {
 
 	// listener.Wait() has drained every event, so the final State is complete
 	// and race-free here — safe to fold event-only errors into the verdict.
+	warning := ""
 	if err == nil {
-		err = terminalError(input.Op, report, listener.State())
+		warning, err = terminalVerdict(input.Op, report, listener.State())
 	}
 
 	if err != nil {
@@ -170,7 +171,10 @@ func Main(args []string) int {
 			send(&ExecReply{Type: ReplyReport, Report: raw})
 		}
 	}
-	send(&ExecReply{Type: ReplySuccess})
+	if warning != "" {
+		LogWarn("%s succeeded with a warning: %s", input.Op, warning)
+	}
+	send(&ExecReply{Type: ReplySuccess, Message: warning})
 	return 0
 }
 
@@ -208,21 +212,21 @@ func StateSampler(op string, listener *EventListener, stateStop <-chan struct{},
 	}
 }
 
-// terminalError decides whether a completed operation should fail the job, for
-// the operations whose failures surface only after the fact rather than as a
-// returned error.
-func terminalError(op string, report *Report, state State) error {
+// terminalVerdict decides whether a completed operation should fail the job,
+// or succeed with a warning, for the operations whose failures surface only
+// after the fact rather than as a returned error.
+func terminalVerdict(op string, report *Report, state State) (string, error) {
 	if report == nil {
-		return nil
+		return "", nil
 	}
 	switch op {
 	case "backup":
 		// A backup that couldn't read some files commits the snapshot but returns a
-		// nil error; the flag lives in the report and nothing downstream inspects
-		// it. Fail the job so a partial backup isn't reported as a clean success,
-		// matching check and restore.
+		// nil error; the count lives in the report and nothing downstream inspects
+		// it. The snapshot is real, so the job succeeds, with a warning so a
+		// partial backup isn't reported as a clean success.
 		if report.Backup != nil && report.Backup.Errors > 0 {
-			return fmt.Errorf("%d file(s) could not be read", report.Backup.Errors)
+			return fmt.Sprintf("%d file(s) could not be read", report.Backup.Errors), nil
 		}
 	case "restore":
 		// listener.Wait() has drained every event, so the final state is complete
@@ -234,16 +238,16 @@ func terminalError(op string, report *Report, state State) error {
 			state.Symlinks.Error + state.Xattrs.Error
 		if entryErrors != 0 {
 			report.Restore.Errors = entryErrors
-			return fmt.Errorf("%d entries could not be restored", entryErrors)
+			return "", fmt.Errorf("%d entries could not be restored", entryErrors)
 		}
 
 	case "sync":
 		// Fail the job if at least one snapshot synchronization failed.
 		if report.Sync != nil && report.Sync.Errors > 0 {
-			return fmt.Errorf("%d snapshot(s) could not be synchronized", report.Sync.Errors)
+			return "", fmt.Errorf("%d snapshot(s) could not be synchronized", report.Sync.Errors)
 		}
 	}
-	return nil
+	return "", nil
 }
 
 // dispatch routes an operation to its handler. Only the operations a remote edge
