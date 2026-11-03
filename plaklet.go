@@ -32,6 +32,9 @@ import (
 
 var doLog func(ReplyType, string, []any)
 
+// signalNotify is signal.Notify, replaced in tests to deliver a signal.
+var signalNotify = signal.Notify
+
 // indexedList reads a flattened string list from a task config: the control
 // plane flattens []string values as "key.0", "key.1", ... (see plakman's
 // flatten.PutStringList). Stops at the first missing index.
@@ -279,7 +282,7 @@ func dispatch(ctx *kcontext.KContext, input *ExecPayload, send func(*ExecReply))
 func CancelOnSignal(cancel context.CancelCauseFunc, stateStop <-chan struct{}) func() {
 	return func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+		signalNotify(c, syscall.SIGINT, syscall.SIGTERM)
 		select {
 		case <-stateStop:
 			// normal termination

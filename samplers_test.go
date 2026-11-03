@@ -2,7 +2,9 @@ package plaklet
 
 import (
 	"testing"
+	"time"
 
+	"github.com/shirou/gopsutil/v4/process"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,4 +73,54 @@ func TestNetworkSamplerDecimatesAndStaysBounded(t *testing.T) {
 	require.LessOrEqual(t, len(n.samples), MaxNetworkSamples)
 	require.Greater(t, n.stride, 1)
 	require.Equal(t, int64(0), n.samples[0].At)
+}
+
+func TestResourceSamplerReadsOwnProcess(t *testing.T) {
+	r := newResourceSampler()
+	require.NotNil(t, r.proc)
+	r.sample()
+	r.sample()
+	require.Len(t, r.samples, 2)
+	require.Positive(t, r.samples[1].MemoryBytes)
+	require.Positive(t, r.numCPU())
+
+	// Without a process handle sampling is a no-op.
+	none := &resourceSampler{stride: 1}
+	none.sample()
+	require.Empty(t, none.samples)
+
+	// A process that cannot be read yields nothing where the platform
+	// reports the failure (Linux), and a zero reading where it does not
+	// (macOS reads an unknown pid as idle); neither is a crash.
+	gone := &resourceSampler{proc: &process.Process{Pid: 1<<31 - 1}, stride: 1}
+	gone.sample()
+	require.LessOrEqual(t, len(gone.samples), 1)
+	for _, s := range gone.samples {
+		require.Zero(t, s.CPUPercent)
+	}
+}
+
+func TestNetworkSamplerHonoursStride(t *testing.T) {
+	n := newNetworkSampler("check")
+	n.stride = 2
+	io := map[string]IOScope{"storage": {Read: IODir{OverallWall: 10}}}
+	n.sample(io)
+	require.Empty(t, n.samples, "first tick of a stride of two is skipped")
+	require.Nil(t, n.snapshot())
+	n.sample(io)
+	require.Len(t, n.samples, 1)
+	snap := n.snapshot()
+	n.sample(io)
+	n.sample(io)
+	require.Len(t, snap, 1, "snapshot must not see later appends")
+}
+
+func TestLatencySamplerHonoursStride(t *testing.T) {
+	l := newLatencySampler("backup")
+	l.stride = 2
+	io := map[string]IOScope{"storage": {Write: IODir{Latency: Latency{Count: 3, Avg: time.Millisecond}}}}
+	l.sample(io)
+	require.Empty(t, l.samples)
+	l.sample(io)
+	require.Len(t, l.samples, 1)
 }
