@@ -26,7 +26,7 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	tags := indexedList(input.TaskConfig, "labels")
 	ignores := indexedList(input.TaskConfig, "ignores")
 
-	imp, err := mkimporter(ctx, input.Source)
+	imp, err := mkimporter(ctx, input.Source, ignores)
 	if err != nil {
 		return nil, err
 	}
@@ -67,9 +67,6 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 
 	source, err := snapshot.NewSource(repo.AppContext(), imp)
 	if err != nil {
-		return nil, err
-	}
-	if err := source.SetExcludes(ignores); err != nil {
 		return nil, err
 	}
 

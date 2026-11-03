@@ -42,13 +42,14 @@ func protocolOf(conf *Configuration) string {
 // mkimporter builds a source importer. It first tries a loaded plugin for the
 // connector's integration; if none is registered it falls back to kloset's
 // compiled-in importer registry (fs, stdio, tar).
-func mkimporter(ctx *kcontext.KContext, conf *Configuration) (importer.Importer, error) {
+func mkimporter(ctx *kcontext.KContext, conf *Configuration, ignores []string) (importer.Importer, error) {
 	opts := &connectors.Options{
 		Hostname:        "plaklet",
 		OperatingSystem: runtime.GOOS,
 		Architecture:    runtime.GOARCH,
 		CWD:             "/",
 		MaxConcurrency:  ctx.MaxConcurrency,
+		Excludes:        ignores,
 	}
 
 	if conf.Integration.Name == "fs" {
