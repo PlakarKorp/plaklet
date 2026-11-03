@@ -41,7 +41,7 @@ func testStore(ctx *kcontext.KContext, target *Configuration) error {
 }
 
 func testSource(ctx *kcontext.KContext, target *Configuration) error {
-	importer, err := mkimporter(ctx, target)
+	importer, err := mkimporter(ctx, target, nil)
 	if err != nil {
 		return err
 	}
