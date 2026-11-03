@@ -9,6 +9,9 @@ import (
 	"github.com/PlakarKorp/plaklet"
 )
 
+// exit is os.Exit, replaced in tests to observe the exit code.
+var exit = os.Exit
+
 func main() {
-	os.Exit(plaklet.Main(os.Args[1:]))
+	exit(plaklet.Main(os.Args[1:]))
 }

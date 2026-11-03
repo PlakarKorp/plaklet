@@ -80,14 +80,16 @@ func createFSRepoWith(t *testing.T, ctx *kcontext.KContext, dir string, tweak fu
 	require.NoError(t, st.Close(ctx))
 }
 
-func fsConf(id uuid.UUID, typ, location string) *Configuration {
-	return &Configuration{
+func fsConf(id uuid.UUID, typ, location string, extra ...ConfigurationField) *Configuration {
+	conf := &Configuration{
 		Id:          id,
 		Type:        typ,
 		Integration: Integration{Name: "fs", Version: "test"},
 		Name:        typ,
 		Fields:      []ConfigurationField{{Key: "location", Val: "fs://" + location}},
 	}
+	conf.Fields = append(conf.Fields, extra...)
+	return conf
 }
 
 // TestEndToEnd drives the full operation set against real fs kloset repos:
