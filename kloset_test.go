@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/PlakarKorp/integration-sdk"
+	_ "github.com/PlakarKorp/integrations/fs/importer"
+	_ "github.com/PlakarKorp/integrations/tar/importer"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/plaklet/plugin"

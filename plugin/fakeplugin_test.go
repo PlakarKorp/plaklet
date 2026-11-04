@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"iter"
 	"os"
 	"os/signal"
 	"syscall"
@@ -97,13 +98,13 @@ func (s stub) Close(context.Context) error {
 
 type stubImporter struct{ stub }
 
-func (stubImporter) Import(context.Context, chan<- *integration.Record, <-chan *integration.Result) error {
-	return errors.ErrUnsupported
+func (stubImporter) Import(context.Context, chan<- *integration.Record, <-chan *integration.Result) (map[string]string, error) {
+	return nil, errors.ErrUnsupported
 }
 
 type stubExporter struct{ stub }
 
-func (stubExporter) Export(context.Context, <-chan *integration.Record, chan<- *integration.Result) error {
+func (stubExporter) Export(context.Context, map[string]string, <-chan *integration.Record, chan<- *integration.Result) error {
 	return errors.ErrUnsupported
 }
 
@@ -113,16 +114,18 @@ func (stubStore) Create(context.Context, []byte) error           { return errors
 func (stubStore) Open(context.Context) ([]byte, error)           { return nil, errors.ErrUnsupported }
 func (stubStore) Mode(context.Context) (integration.Mode, error) { return 0, errors.ErrUnsupported }
 func (stubStore) Size(context.Context) (int64, error)            { return 0, errors.ErrUnsupported }
-func (stubStore) List(context.Context, integration.StorageResource) ([]integration.MAC, error) {
-	return nil, errors.ErrUnsupported
+func (stubStore) List(context.Context, integration.StorageResource, integration.StorageFlag) iter.Seq2[*integration.StorageResourceEntry, error] {
+	return func(yield func(*integration.StorageResourceEntry, error) bool) {
+		yield(nil, errors.ErrUnsupported)
+	}
 }
-func (stubStore) Put(context.Context, integration.StorageResource, integration.MAC, io.Reader) (int64, error) {
+func (stubStore) Put(context.Context, integration.StorageResource, integration.StorageFlag, integration.MAC, io.Reader) (int64, error) {
 	return 0, errors.ErrUnsupported
 }
-func (stubStore) Get(context.Context, integration.StorageResource, integration.MAC, *integration.Range) (io.ReadCloser, error) {
+func (stubStore) Get(context.Context, integration.StorageResource, integration.StorageFlag, integration.MAC, *integration.Range) (io.ReadCloser, error) {
 	return nil, errors.ErrUnsupported
 }
-func (stubStore) Delete(context.Context, integration.StorageResource, integration.MAC) error {
+func (stubStore) Delete(context.Context, integration.StorageResource, integration.StorageFlag, integration.MAC) error {
 	return errors.ErrUnsupported
 }
 
