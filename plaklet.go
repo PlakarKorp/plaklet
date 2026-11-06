@@ -149,7 +149,27 @@ func Main(args []string) int {
 	wg.Go(StateSampler(input.Op, listener, stateStop, send))
 	wg.Go(CancelOnSignal(ctx.Cancel, stateStop))
 
-	report, err := dispatch(ctx, &input, send)
+	replies := make(chan ExecReply)
+	var executor LocalExecutor
+	executor.ktx = ctx
+	var report *Report
+
+	wg.Go(func() {
+		for reply := range replies {
+			if reply.Type == ReplyReport {
+				var r Report
+				if err := json.Unmarshal(reply.Report, &r); err != nil {
+					fmt.Fprintf(os.Stderr, "plaklet: failed to unmarshal report: %s\n", err)
+				} else {
+					report = &r
+				}
+				continue
+			}
+			send(&reply)
+		}
+	})
+
+	err := executor.Execute(ctx, input, replies, os.Stderr)
 
 	// Stop sampling, then close and drain the event bus.
 	close(stateStop)
@@ -251,36 +271,6 @@ func terminalVerdict(op string, report *Report, state State) (string, error) {
 		}
 	}
 	return "", nil
-}
-
-// dispatch routes an operation to its handler. Only the operations a remote edge
-// realistically runs are implemented; others return an explicit error. send is
-// for the operations whose result is a stream rather than a report.
-func dispatch(ctx *kcontext.KContext, input *ExecPayload, send func(*ExecReply)) (*Report, error) {
-	switch input.Op {
-	case "backup":
-		return backup(ctx, input)
-	case "check":
-		return check(ctx, input)
-	case "create":
-		return create(ctx, input)
-	case "maintenance":
-		return maintenance(ctx, input)
-	case "prune":
-		return prune(ctx, input)
-	case "restore":
-		return restore(ctx, input)
-	case "rm":
-		return rm(ctx, input)
-	case "sync":
-		return synchronize(ctx, input)
-	case "test":
-		return test(ctx, input)
-	case "inventory":
-		return nil, listInventory(ctx, input, send)
-	default:
-		return nil, fmt.Errorf("unsupported operation %q", input.Op)
-	}
 }
 
 func CancelOnSignal(cancel context.CancelCauseFunc, stateStop <-chan struct{}) func() {
