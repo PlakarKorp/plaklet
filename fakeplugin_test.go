@@ -84,10 +84,10 @@ func (f *fakeImporter) Ping(ctx context.Context) error {
 	return f.Importer.Ping(ctx)
 }
 
-func (f *fakeImporter) Import(ctx context.Context, records chan<- *integration.Record, results <-chan *integration.Result) error {
+func (f *fakeImporter) Import(ctx context.Context, records chan<- *integration.Record, results <-chan *integration.Result) (map[string]string, error) {
 	if f.fail == "import" {
 		close(records)
-		return errFake
+		return nil, errFake
 	}
 	return f.Importer.Import(ctx, records, results)
 }
@@ -122,12 +122,12 @@ func (f *fakeExporter) Ping(ctx context.Context) error {
 	return f.Exporter.Ping(ctx)
 }
 
-func (f *fakeExporter) Export(ctx context.Context, records <-chan *integration.Record, results chan<- *integration.Result) error {
+func (f *fakeExporter) Export(ctx context.Context, meta map[string]string, records <-chan *integration.Record, results chan<- *integration.Result) error {
 	if f.fail == "export" {
 		close(results)
 		return errFake
 	}
-	return f.Exporter.Export(ctx, records, results)
+	return f.Exporter.Export(ctx, meta, records, results)
 }
 
 func (f *fakeExporter) Close(ctx context.Context) error {
@@ -160,11 +160,11 @@ func (f *fakeStore) Open(ctx context.Context) ([]byte, error) {
 	return f.Store.Open(ctx)
 }
 
-func (f *fakeStore) Put(ctx context.Context, res integration.StorageResource, mac integration.MAC, rd io.Reader) (int64, error) {
+func (f *fakeStore) Put(ctx context.Context, res integration.StorageResource, flag integration.StorageFlag, mac integration.MAC, rd io.Reader) (int64, error) {
 	if f.fail == "put:"+res.String() {
 		return 0, errFake
 	}
-	return f.Store.Put(ctx, res, mac, rd)
+	return f.Store.Put(ctx, res, flag, mac, rd)
 }
 
 func (f *fakeStore) Close(ctx context.Context) error {
