@@ -59,7 +59,13 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		},
 	}
 
-	snap, err := snapshot.Create(repo, repository.DefaultType, "", objects.NilMac, opts)
+	packfileTmpDir, err := os.MkdirTemp(os.Getenv("PACKFILES_BUILD_DIR"), "plaklet-pack-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(packfileTmpDir)
+
+	snap, err := snapshot.Create(repo, repository.DefaultType, packfileTmpDir, objects.NilMac, opts)
 	if err != nil {
 		return nil, err
 	}
