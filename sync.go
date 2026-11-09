@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/PlakarKorp/kloset/kcontext"
@@ -85,7 +86,13 @@ func syncSnap(srcRepo, dstRepo *repository.Repository, id objects.MAC) (*SyncRep
 	}
 	defer srcSnap.Close()
 
-	dstSnap, err := snapshot.Create(dstRepo, repository.DefaultType, "", srcSnap.Header.Identifier, &snapshot.BuilderOptions{
+	packfileTmpDir, err := os.MkdirTemp(os.Getenv("PACKFILES_BUILD_DIR"), "plaklet-pack-*")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(packfileTmpDir)
+
+	dstSnap, err := snapshot.Create(dstRepo, repository.DefaultType, packfileTmpDir, srcSnap.Header.Identifier, &snapshot.BuilderOptions{
 		// Fold each new state into the destination repo's aggregated state in
 		// process (see backup.go for why the edge does this itself).
 		StateRefresher: func(_ objects.MAC, _ bool) error {
