@@ -31,6 +31,7 @@ const (
 	ReplyState   ReplyType = "state"
 	ReplyFailure ReplyType = "failure"
 	ReplySuccess ReplyType = "success"
+	ReplyLog     ReplyType = "log"
 )
 
 // ExecReply is one message in plaklet's stdout stream. Report is emitted as raw
