@@ -3,10 +3,12 @@ package plaklet
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/PlakarKorp/kloset/caching"
@@ -87,6 +89,37 @@ func createFSRepoWith(t *testing.T, ctx *kcontext.KContext, dir string, tweak fu
 	require.NoError(t, st.Close(ctx))
 }
 
+func dispatch(ctx *kcontext.KContext, payload *ExecPayload) (*Report, error) {
+	report, _, err := dispatch_replies(ctx, payload)
+	return report, err
+}
+
+func dispatch_replies(ctx *kcontext.KContext, payload *ExecPayload) (*Report, []ExecReply, error) {
+	var arr []ExecReply
+	replies := make(chan ExecReply)
+	var executor LocalExecutor
+	executor.ktx = ctx
+	var report *Report
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		for reply := range replies {
+			if reply.Type == ReplyReport {
+				var r Report
+				if err := json.Unmarshal(reply.Report, &r); err != nil {
+					fmt.Fprintf(os.Stderr, "plaklet: failed to unmarshal report: %s\n", err)
+				} else {
+					report = &r
+				}
+			} else {
+				arr = append(arr, reply)
+			}
+		}
+	})
+	err := executor.Execute(ctx, *payload, replies, io.Discard)
+	wg.Wait()
+	return report, arr, err
+}
+
 func fsConf(id uuid.UUID, typ, location string, extra ...ConfigurationField) *Configuration {
 	conf := &Configuration{
 		Id:          id,
@@ -124,7 +157,7 @@ func TestEndToEnd(t *testing.T) {
 			Op:         "create",
 			TaskConfig: map[string]string{"no_encryption": "true"},
 			Source:     store,
-		}, nil)
+		})
 		require.NoError(t, err)
 	})
 
@@ -137,7 +170,7 @@ func TestEndToEnd(t *testing.T) {
 			TaskConfig: map[string]string{"labels.0": "e2e", "ignores.0": "skip.log"},
 			Source:     source,
 			Target:     store,
-		}, nil)
+		})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Backup)
 		require.Equal(t, uint64(2), rep.Backup.Content.Files, "skip.log must be excluded")
@@ -147,7 +180,7 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("check", func(t *testing.T) {
 		ctx := newTestContext(t)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Check)
 		require.Len(t, rep.Check.Checks, 1)
@@ -159,7 +192,7 @@ func TestEndToEnd(t *testing.T) {
 			Op:         "check",
 			TaskConfig: map[string]string{"labels.0": "no-such-label"},
 			Source:     store,
-		}, nil)
+		})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Check)
 		require.Empty(t, rep.Check.Checks)
@@ -175,7 +208,7 @@ func TestEndToEnd(t *testing.T) {
 			TaskConfig: map[string]string{"latest": "true", "locate.filter.latest": "true"},
 			Source:     store,
 			Target:     dest,
-		}, nil)
+		})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Restore)
 
@@ -190,7 +223,7 @@ func TestEndToEnd(t *testing.T) {
 	t.Run("sync", func(t *testing.T) {
 		ctx := newTestContext(t)
 		createFSRepo(t, ctx, peerDir)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Sync)
 		require.Len(t, rep.Sync.Syncs, 1, "one snapshot should copy")
@@ -199,7 +232,7 @@ func TestEndToEnd(t *testing.T) {
 
 	t.Run("sync-idempotent", func(t *testing.T) {
 		ctx := newTestContext(t)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Sync)
 		require.Empty(t, rep.Sync.Syncs, "second sync copies nothing")
@@ -219,7 +252,7 @@ func TestRmEndToEnd(t *testing.T) {
 
 	run := func(op string, cfg map[string]string, src, tgt *Configuration) *Report {
 		ctx := newTestContext(t)
-		rep, err := dispatch(ctx, &ExecPayload{Op: op, TaskConfig: cfg, Source: src, Target: tgt}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: op, TaskConfig: cfg, Source: src, Target: tgt})
 		require.NoError(t, err)
 		return rep
 	}
@@ -263,7 +296,7 @@ func TestCreateHonoursCompression(t *testing.T) {
 		Op:         "create",
 		TaskConfig: map[string]string{"no_encryption": "true", "compression": "gzip"},
 		Source:     store,
-	}, nil)
+	})
 	require.NoError(t, err)
 
 	st, err := storage.New(ctx, map[string]string{"location": "fs://" + repoDir})
@@ -281,13 +314,13 @@ func TestCreateHonoursCompression(t *testing.T) {
 		Op:         "create",
 		TaskConfig: map[string]string{"compression": "bogus"},
 		Source:     fsConf(uuid.MustParse("33333333-3333-3333-3333-333333333333"), "storage", filepath.Join(t.TempDir(), "repo2")),
-	}, nil)
+	})
 	require.Error(t, err)
 }
 
 func TestDispatchUnsupportedOp(t *testing.T) {
 	// A bare context is enough: dispatch rejects the op before touching kloset.
-	_, err := dispatch(kcontext.NewKContext(), &ExecPayload{Op: "bogus"}, nil)
+	_, err := dispatch(kcontext.NewKContext(), &ExecPayload{Op: "bogus"})
 	require.Error(t, err)
 }
 
@@ -309,7 +342,7 @@ func TestIncrementalBackupDedups(t *testing.T) {
 
 	run := func(op string, src, tgt *Configuration) *Report {
 		ctx := newTestContext(t)
-		rep, err := dispatch(ctx, &ExecPayload{Op: op, Source: src, Target: tgt}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: op, Source: src, Target: tgt})
 		require.NoError(t, err)
 		return rep
 	}
@@ -377,7 +410,7 @@ func TestBackupStateFromEvents(t *testing.T) {
 		Op:     "backup",
 		Source: fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir),
 		Target: fsConf(uuid.MustParse("22222222-2222-2222-2222-222222222222"), "storage", repoDir),
-	}, nil)
+	})
 	require.NoError(t, err)
 	ctx.Events().Close()
 	listener.Wait()

@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/PlakarKorp/integration-sdk"
+	_ "github.com/PlakarKorp/integrations/fs/importer"
+	_ "github.com/PlakarKorp/integrations/fs/storage"
 	"github.com/PlakarKorp/kloset/caching"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/objects"
@@ -35,9 +37,9 @@ func seededStore(t *testing.T, ctx *kcontext.KContext) (source, store *Configura
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a.txt"), []byte("hello"), 0o644))
 	source = fsConf(srcID, "importer", srcDir)
 	store = fsConf(storeID, "storage", filepath.Join(t.TempDir(), "repo"))
-	_, err := dispatch(ctx, &ExecPayload{Op: "create", Source: store}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "create", Source: store})
 	require.NoError(t, err)
-	rep, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+	rep, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 	require.NoError(t, err)
 	require.NotNil(t, rep.Backup)
 	return source, store
@@ -88,7 +90,7 @@ func TestBackupErrors(t *testing.T) {
 		"bad store":       {Op: "backup", Source: source, Target: noSuchIntegration},
 		"store not found": {Op: "backup", Source: source, Target: missing},
 	} {
-		_, err := dispatch(ctx, payload, nil)
+		_, err := dispatch(ctx, payload)
 		require.Error(t, err, name)
 	}
 
@@ -96,7 +98,7 @@ func TestBackupErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		lockExclusively(t, ctx, store)
-		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 		require.Error(t, err)
 	})
 
@@ -107,7 +109,7 @@ func TestBackupErrors(t *testing.T) {
 		source, store := seededStore(t, ctx)
 		dropPackfiles(t, store)
 		require.NoError(t, os.WriteFile(filepath.Join(source.params()["location"][len("fs://"):], "b.txt"), []byte("more"), 0o644))
-		rep, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 		require.NoError(t, err)
 		require.NotNil(t, rep.Backup)
 	})
@@ -116,7 +118,7 @@ func TestBackupErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		loadFakePlugin(t, "importer", integration.ConnectorTypeImporter, "")
-		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: fakeConf("importer", t.TempDir(), failField("import")), Target: store}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: fakeConf("importer", t.TempDir(), failField("import")), Target: store})
 		require.Error(t, err)
 	})
 
@@ -125,7 +127,7 @@ func TestBackupErrors(t *testing.T) {
 		source, store := seededStore(t, ctx)
 		loadFakePlugin(t, "storage", integration.ConnectorTypeStorage, "")
 		target := fakeConf("storage", store.params()["location"][len("fs://"):], failField("put:state"))
-		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: target}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: target})
 		require.Error(t, err)
 	})
 }
@@ -140,7 +142,7 @@ func TestCheckErrors(t *testing.T) {
 		"bad store":       {Op: "check", Source: noSuchIntegration},
 		"store not found": {Op: "check", Source: missing},
 	} {
-		_, err := dispatch(ctx, payload, nil)
+		_, err := dispatch(ctx, payload)
 		require.Error(t, err, name)
 	}
 
@@ -148,7 +150,7 @@ func TestCheckErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		cacheAsFile(t, ctx, "check")
-		_, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store})
 		require.Error(t, err)
 	})
 
@@ -156,7 +158,7 @@ func TestCheckErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		dropPackfiles(t, store)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "check", Source: store})
 		require.Error(t, err)
 		require.NotNil(t, rep)
 		require.Equal(t, uint64(1), rep.Check.Errors)
@@ -166,14 +168,14 @@ func TestCheckErrors(t *testing.T) {
 func TestCreateErrors(t *testing.T) {
 	ctx := newTestContext(t)
 
-	_, err := dispatch(ctx, &ExecPayload{Op: "create"}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "create"})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: noSuchIntegration}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: noSuchIntegration})
 	require.Error(t, err)
 
 	// A store cannot be created where one already is.
 	_, store := seededStore(t, ctx)
-	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: store}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: store})
 	require.Error(t, err)
 
 	// Compression can be turned off.
@@ -181,7 +183,7 @@ func TestCreateErrors(t *testing.T) {
 		Op:         "create",
 		TaskConfig: map[string]string{"no_compression": "true"},
 		Source:     fsConf(storeID, "storage", filepath.Join(t.TempDir(), "repo")),
-	}, nil)
+	})
 	require.NoError(t, err)
 }
 
@@ -194,7 +196,7 @@ func TestRestoreErrors(t *testing.T) {
 	createFSRepo(t, ctx, empty.params()["location"][len("fs://"):])
 
 	// A second snapshot, so an id filter matching every snapshot is ambiguous.
-	_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 	require.NoError(t, err)
 
 	for name, payload := range map[string]*ExecPayload{
@@ -206,7 +208,7 @@ func TestRestoreErrors(t *testing.T) {
 		"no snapshot":     {Op: "restore", Source: empty, Target: dest},
 		"ambiguous":       {Op: "restore", TaskConfig: map[string]string{"locate.filter.ids.0": ""}, Source: store, Target: dest},
 	} {
-		_, err := dispatch(ctx, payload, nil)
+		_, err := dispatch(ctx, payload)
 		require.Error(t, err, name)
 	}
 
@@ -214,7 +216,7 @@ func TestRestoreErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		dropPackfiles(t, store)
-		_, err := dispatch(ctx, &ExecPayload{Op: "restore", Source: store, Target: dest}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: "restore", Source: store, Target: dest})
 		require.Error(t, err)
 	})
 }
@@ -234,13 +236,13 @@ func TestSyncErrors(t *testing.T) {
 		"bad target":     {Op: "sync", Source: store, Target: noSuchIntegration},
 		"target missing": {Op: "sync", Source: store, Target: missing},
 	} {
-		_, err := dispatch(ctx, payload, nil)
+		_, err := dispatch(ctx, payload)
 		require.Error(t, err, name)
 	}
 
 	t.Run("locked peer", func(t *testing.T) {
 		lockExclusively(t, ctx, peer)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), rep.Sync.Errors)
 	})
@@ -251,7 +253,7 @@ func TestSyncErrors(t *testing.T) {
 		peer := fsConf(peerID, "storage", filepath.Join(t.TempDir(), "peer"))
 		createFSRepo(t, ctx, peer.params()["location"][len("fs://"):])
 		dropPackfiles(t, store)
-		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), rep.Sync.Errors)
 	})
@@ -264,15 +266,15 @@ func TestSyncErrors(t *testing.T) {
 		source, store := seededStore(t, ctx)
 		peer := fsConf(peerID, "storage", filepath.Join(t.TempDir(), "peer"))
 		createFSRepo(t, ctx, peer.params()["location"][len("fs://"):])
-		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.Len(t, rep.Sync.Syncs, 1)
 
 		require.NoError(t, os.WriteFile(filepath.Join(source.params()["location"][len("fs://"):], "b.txt"), []byte("more"), 0o644))
-		_, err = dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+		_, err = dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 		require.NoError(t, err)
 		dropPackfiles(t, peer)
-		rep, err = dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+		rep, err = dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), rep.Sync.Errors)
 	})
@@ -285,12 +287,12 @@ func TestSyncReusesParent(t *testing.T) {
 	source, store := seededStore(t, ctx)
 	peer := fsConf(peerID, "storage", filepath.Join(t.TempDir(), "peer"))
 	createFSRepo(t, ctx, peer.params()["location"][len("fs://"):])
-	_, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(source.params()["location"][len("fs://"):], "b.txt"), []byte("more"), 0o644))
-	_, err = dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "backup", Source: source, Target: store})
 	require.NoError(t, err)
-	rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer}, nil)
+	rep, err := dispatch(ctx, &ExecPayload{Op: "sync", Source: store, Target: peer})
 	require.NoError(t, err)
 	require.Len(t, rep.Sync.Syncs, 1)
 	require.Zero(t, rep.Sync.Errors)
@@ -301,13 +303,13 @@ func TestRmErrors(t *testing.T) {
 	_, store := seededStore(t, ctx)
 	ids := map[string]string{"snapshot_ids.0": "00000000000000000000000000000000ab000000000000000000000000000000"}
 
-	_, err := dispatch(ctx, &ExecPayload{Op: "rm"}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "rm"})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: map[string]string{"snapshot_ids.0": "zz"}, Source: store}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: map[string]string{"snapshot_ids.0": "zz"}, Source: store})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: noSuchIntegration}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: noSuchIntegration})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: fsConf(storeID, "storage", filepath.Join(t.TempDir(), "missing"))}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: fsConf(storeID, "storage", filepath.Join(t.TempDir(), "missing"))})
 	require.Error(t, err)
 
 	// A removal that fails is counted in the report, not returned.
@@ -315,7 +317,7 @@ func TestRmErrors(t *testing.T) {
 		ctx := newTestContext(t)
 		_, store := seededStore(t, ctx)
 		cacheAsFile(t, ctx, "scan")
-		rep, err := dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: store}, nil)
+		rep, err := dispatch(ctx, &ExecPayload{Op: "rm", TaskConfig: ids, Source: store})
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), rep.Rm.Errors)
 		require.Empty(t, rep.Rm.SnapshotIDs)
@@ -325,9 +327,9 @@ func TestRmErrors(t *testing.T) {
 func TestUnsupportedOps(t *testing.T) {
 	ctx := newTestContext(t)
 	for _, op := range []string{"prune", "maintenance"} {
-		_, err := dispatch(ctx, &ExecPayload{Op: op}, nil)
+		_, err := dispatch(ctx, &ExecPayload{Op: op})
 		require.Error(t, err, op)
-		_, err = dispatch(ctx, &ExecPayload{Op: op, Source: fsConf(storeID, "storage", t.TempDir())}, nil)
+		_, err = dispatch(ctx, &ExecPayload{Op: op, Source: fsConf(storeID, "storage", t.TempDir())})
 		require.ErrorIs(t, err, errors.ErrUnsupported, op)
 	}
 }
@@ -337,9 +339,9 @@ func TestTestOp(t *testing.T) {
 	_, store := seededStore(t, ctx)
 	srcDir := t.TempDir()
 
-	_, err := dispatch(ctx, &ExecPayload{Op: "test"}, nil)
+	_, err := dispatch(ctx, &ExecPayload{Op: "test"})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: &Configuration{Type: "bogus"}}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: &Configuration{Type: "bogus"}})
 	require.Error(t, err)
 
 	conf := func(typ string, c *Configuration) *Configuration {
@@ -349,23 +351,23 @@ func TestTestOp(t *testing.T) {
 	}
 
 	// store
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", store)}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", store)})
 	require.NoError(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", noSuchIntegration)}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", noSuchIntegration)})
 	require.Error(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", fsConf(storeID, "storage", filepath.Join(t.TempDir(), "missing")))}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("store", fsConf(storeID, "storage", filepath.Join(t.TempDir(), "missing")))})
 	require.Error(t, err)
 
 	// source
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("source", fsConf(srcID, "importer", srcDir))}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("source", fsConf(srcID, "importer", srcDir))})
 	require.NoError(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("source", noSuchIntegration)}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("source", noSuchIntegration)})
 	require.Error(t, err)
 
 	// destination
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("destination", fsConf(destID, "exporter", srcDir))}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("destination", fsConf(destID, "exporter", srcDir))})
 	require.NoError(t, err)
-	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("destination", noSuchIntegration)}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "test", Source: conf("destination", noSuchIntegration)})
 	require.Error(t, err)
 }
 
@@ -373,9 +375,7 @@ func TestInventoryThroughPlugin(t *testing.T) {
 	ctx := newTestContext(t)
 	loadFakePlugin(t, "inventory", integration.ConnectorTypeInventory, "")
 
-	var replies []*ExecReply
-	send := func(r *ExecReply) { replies = append(replies, r) }
-	_, err := dispatch(ctx, &ExecPayload{Op: "inventory", Source: fakeConf("inventory", "")}, send)
+	_, replies, err := dispatch_replies(ctx, &ExecPayload{Op: "inventory", Source: fakeConf("inventory", "")})
 	require.NoError(t, err)
 	require.Len(t, replies, 2)
 	for _, r := range replies {
@@ -383,6 +383,6 @@ func TestInventoryThroughPlugin(t *testing.T) {
 	}
 
 	// A plugin that fails to start.
-	_, err = dispatch(ctx, &ExecPayload{Op: "inventory", Source: fakeConf("inventory", "", failField("init"))}, send)
+	_, replies, err = dispatch_replies(ctx, &ExecPayload{Op: "inventory", Source: fakeConf("inventory", "", failField("init"))})
 	require.Error(t, err)
 }
