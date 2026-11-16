@@ -233,11 +233,14 @@ func TestLogLevels(t *testing.T) {
 	}, *replies)
 }
 
-func TestTerminalErrorSync(t *testing.T) {
-	require.NoError(t, terminalError("sync", &Report{Sync: &SyncsReport{}}, State{}))
-	err := terminalError("sync", &Report{Sync: &SyncsReport{Errors: 2}}, State{})
+func TestTerminalVerdictSync(t *testing.T) {
+	warning, err := terminalVerdict("sync", &Report{Sync: &SyncsReport{}}, State{})
+	require.NoError(t, err)
+	require.Equal(t, "", warning)
+	warning, err = terminalVerdict("sync", &Report{Sync: &SyncsReport{Errors: 2}}, State{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "2")
+	require.Equal(t, "", warning)
 }
 
 func TestInventoryWithoutPlugin(t *testing.T) {
