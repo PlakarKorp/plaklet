@@ -9,9 +9,8 @@ import (
 	"slices"
 	"time"
 
+	"github.com/PlakarKorp/integration-sdk"
 	"github.com/PlakarKorp/kloset/kcontext"
-	"github.com/PlakarKorp/kloset/objects"
-	"github.com/PlakarKorp/plakman"
 	"github.com/google/uuid"
 	"github.com/vmihailenco/msgpack/v5"
 )
@@ -28,7 +27,7 @@ type RequestPkt struct {
 	FireAndForget bool
 
 	// If empty do a full rebuild otherwise ingest that file from disk.
-	StateID objects.MAC
+	StateID integration.MAC
 }
 
 type ResponsePkt struct {
@@ -119,7 +118,7 @@ func newClient(socketPath string, ignoreVersion bool) (*Client, error) {
 }
 
 func (c *Client) handshake(ignoreVersion bool) error {
-	ourvers := []byte(plakman.Version)
+	ourvers := []byte(Version)
 
 	if err := c.enc.Encode(ourvers); err != nil {
 		return err
