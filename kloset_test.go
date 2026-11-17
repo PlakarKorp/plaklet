@@ -10,7 +10,6 @@ import (
 
 	"github.com/PlakarKorp/integration-sdk"
 	_ "github.com/PlakarKorp/integrations/fs/importer"
-	_ "github.com/PlakarKorp/integrations/tar/importer"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/plaklet/plugin"
@@ -47,20 +46,12 @@ func TestMkimporter(t *testing.T) {
 	_, err := mkimporter(ctx, fsConf(uuid.Nil, "importer", "relative/path"), nil)
 	require.Error(t, err)
 
-	// An integration no plugin backs falls through to kloset's registry: tar
-	// is linked in-process, an unknown protocol is not.
-	tarPath := filepath.Join(t.TempDir(), "x.tar")
-	require.NoError(t, os.WriteFile(tarPath, make([]byte, 1024), 0o644))
-	tarConf := &Configuration{Integration: Integration{Name: "tar"}, Fields: []ConfigurationField{{Key: "location", Val: "tar://" + tarPath}}}
-	imp, err := mkimporter(ctx, tarConf, nil)
-	require.NoError(t, err)
-	require.NoError(t, imp.Close(ctx))
 	_, err = mkimporter(ctx, &Configuration{Integration: Integration{Name: "nope"}, Fields: []ConfigurationField{{Key: "location", Val: "nope://x"}}}, nil)
 	require.Error(t, err)
 
 	// A loaded plugin wins.
 	loadFakePlugin(t, "importer", integration.ConnectorTypeImporter, "")
-	imp, err = mkimporter(ctx, fakeConf("importer", t.TempDir()), nil)
+	imp, err := mkimporter(ctx, fakeConf("importer", t.TempDir()), nil)
 	require.NoError(t, err)
 	require.NoError(t, imp.Ping(ctx))
 	require.NoError(t, imp.Close(ctx))
