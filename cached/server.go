@@ -1,0 +1,436 @@
+/*
+ * Copyright (c) 2025 Mathieu Masson <mathieu@plakar.io>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ */
+
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log"
+	"net"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/PlakarKorp/integration-sdk"
+	"github.com/PlakarKorp/integration-sdk/client"
+	"github.com/PlakarKorp/kloset/caching"
+	"github.com/PlakarKorp/kloset/caching/pebble"
+	"github.com/PlakarKorp/kloset/connectors/storage"
+	"github.com/PlakarKorp/kloset/encryption"
+	"github.com/PlakarKorp/kloset/kcontext"
+	klogging "github.com/PlakarKorp/kloset/logging"
+	"github.com/PlakarKorp/kloset/objects"
+	"github.com/PlakarKorp/kloset/repository"
+	"github.com/PlakarKorp/pkg"
+	"github.com/PlakarKorp/plakman"
+	"github.com/PlakarKorp/plakman/daemonize/logging"
+	"github.com/PlakarKorp/plakman/executor/cached"
+	"github.com/PlakarKorp/plakman/plugin"
+	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	"github.com/vmihailenco/msgpack/v5"
+)
+
+const (
+	pluginPingInterval = 30 * time.Second
+	pluginPingTimeout  = 10 * time.Second
+)
+
+type Cached struct {
+	socketPath string
+	listener   net.Listener
+
+	jobMtx   sync.Mutex
+	jobQueue map[uuid.UUID](chan jobReq)
+}
+
+type jobReq struct {
+	stateID objects.MAC
+	ch      chan error
+}
+
+func runCached(ctx context.Context, cachedir string) error {
+	var cmd Cached
+	cmd.socketPath = filepath.Join(cachedir, "cached.sock")
+	cmd.jobMtx = sync.Mutex{}
+	cmd.jobQueue = make(map[uuid.UUID]chan jobReq)
+
+	ktx := kcontext.NewKContext()
+	ktx.MaxConcurrency = 1
+	ktx.CacheDir = cachedir
+	ktx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
+	ktx.SetLogger(klogging.NewLogger(os.Stdout, os.Stderr))
+
+	return cmd.ListenAndServe(ktx)
+}
+
+func (cmd *Cached) Close() error {
+	if cmd.listener != nil {
+		_ = cmd.listener.Close()
+	}
+	if err := os.Remove(cmd.socketPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func (cmd *Cached) ListenAndServe(ctx *kcontext.KContext) error {
+	lock, err := cached.LockedFile(cmd.socketPath + ".cached-lock")
+	if err != nil {
+		return errors.New("failed to obtain lock")
+	}
+	conn, err := net.Dial("unix", cmd.socketPath)
+	if err == nil {
+		lock.Unlock()
+		_ = conn.Close()
+		return errors.New("cached already running")
+	}
+	_ = os.Remove(cmd.socketPath)
+
+	listener, err := net.Listen("unix", cmd.socketPath)
+	lock.Unlock()
+
+	if err != nil {
+		return fmt.Errorf("failed to bind the socket: %w", err)
+	}
+
+	cancelled := false
+	go func() {
+		<-ctx.Done()
+		cancelled = true
+		_ = listener.Close()
+	}()
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			if cancelled {
+				return ctx.Err()
+			}
+
+			opErr := &net.OpError{}
+			if errors.As(err, &opErr) && opErr.Err.Error() == "use of closed network connection" {
+				return nil
+			}
+			// TODO: we should retry / wait and retry on
+			// some errors, not everything is fatal.
+			return err
+		}
+
+		go cmd.handleCachedClient(ctx, conn)
+	}
+}
+
+func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
+	defer conn.Close() //nolint:errcheck
+
+	encoder := msgpack.NewEncoder(conn)
+	decoder := msgpack.NewDecoder(conn)
+
+	// handshake
+	var (
+		clientvers []byte
+		ourvers    = []byte(plakman.Version)
+	)
+	if err := decoder.Decode(&clientvers); err != nil {
+		return
+	}
+	if err := encoder.Encode(ourvers); err != nil {
+		return
+	}
+
+	pkt := &cached.RequestPkt{}
+	if err := decoder.Decode(pkt); err != nil {
+		if isDisconnectError(err) {
+			logging.Warn("client disconnected during initial request")
+			return
+		}
+		logging.Warn("Failed to decode RPC: %v", err)
+		return
+	}
+
+	logging.Info("cached: rebuild request for %s", pkt.RepoID)
+
+	// Is there already a job goroutine running for this repo:
+	var jq chan jobReq
+	var ok bool
+	var err error
+	cmd.jobMtx.Lock()
+	if jq, ok = cmd.jobQueue[pkt.RepoID]; !ok {
+		jq = make(chan jobReq, 1024)
+		err = cmd.rebuildJob(ctx, jq, pkt)
+
+		if err == nil {
+			cmd.jobQueue[pkt.RepoID] = jq
+		}
+	}
+	cmd.jobMtx.Unlock()
+
+	if err == nil {
+		j := jobReq{
+			stateID: pkt.StateID,
+		}
+
+		if !pkt.FireAndForget {
+			j.ch = make(chan error, 1)
+		}
+
+		jq <- j
+
+		if !pkt.FireAndForget {
+			err = <-j.ch
+		}
+	}
+
+	errStr := ""
+	exitCode := 0
+	if err != nil {
+		log.Printf("cached: request failed for %s: %v", pkt.RepoID, err)
+		errStr = err.Error()
+		exitCode = -1
+	}
+
+	response := &cached.ResponsePkt{
+		ExitCode: exitCode,
+		Err:      errStr,
+	}
+	if err := encoder.Encode(&response); err != nil {
+		logging.Warn("client write error: %v", err)
+	}
+}
+
+func (cmd *Cached) mkstore(pkgdir, pkgname, pkgver string, params map[string]string) (context.Context, integration.Store, plugin.ExitConn, error) {
+	plug := pkg.Package{
+		Name:            pkgname,
+		Version:         pkgver,
+		Architecture:    runtime.GOARCH,
+		OperatingSystem: runtime.GOOS,
+	}
+	plugdir := filepath.Join(pkgdir, strings.TrimSuffix(plug.Filename(), ".ptar"))
+	manifest, err := pkg.NewManifestFromFile(filepath.Join(plugdir, "manifest.yaml"))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	location := params["location"]
+	proto, _, _ := strings.Cut(location, "://")
+
+	for _, conn := range manifest.Connectors {
+		if conn.Type != integration.ConnectorTypeStorage {
+			continue
+		}
+		if !slices.Contains(conn.Protocols, proto) {
+			continue
+		}
+
+		exe := filepath.Join(plugdir, conn.Executable)
+		// make sure exe is below the plugdir
+		if !strings.HasPrefix(exe, plugdir+"/") {
+			return nil, nil, nil, errors.New("executable path escapes")
+		}
+
+		ctx := context.Background()
+		clt, pconn, err := plugin.ConnectPlugin(exe, conn.Args)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		store, err := client.NewStorage(ctx, clt, proto, params)
+		if err != nil {
+			_ = pconn.Close()
+			return nil, nil, nil, err
+		}
+
+		return ctx, store, pconn, nil
+	}
+
+	return nil, nil, nil, fmt.Errorf("failed to find the executable for %s@%s",
+		pkgname, pkgver)
+}
+
+func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *cached.RequestPkt) error {
+	_, store, pconn, err := cmd.mkstore(ctx.CacheDir, req.PluginName, req.PluginVersion, req.StoreConfig)
+	if err != nil {
+		return fmt.Errorf("failed to run storage: %w", err)
+	}
+
+	serializedConfig, err := store.Open(ctx)
+	if err != nil {
+		_ = store.Close(ctx)
+		_ = pconn.Close()
+		return fmt.Errorf("failed to open storage: %w", err)
+	}
+
+	key, err := checkPassphrase(req.Secret, serializedConfig)
+	if err != nil {
+		_ = store.Close(ctx)
+		_ = pconn.Close()
+		return fmt.Errorf("incorrect passphrase %s: %w", string(req.Secret), err)
+	}
+
+	repo, err := repository.NewRepository(ctx, key, store, serializedConfig, &repository.RepositoryOpts{RWStateCache: true})
+	if err != nil {
+		_ = store.Close(ctx)
+		_ = pconn.Close()
+		return fmt.Errorf("failed to open repository: %w", err)
+	}
+
+	if req.RepoID != repo.Configuration().RepositoryID {
+		err := fmt.Errorf("invalid uuid given %q repository id is %q", req.RepoID.String(),
+			repo.Configuration().RepositoryID.String())
+		_ = repo.Close()
+		_ = store.Close(ctx)
+		_ = pconn.Close()
+		return err
+	}
+
+	go func() {
+		defer pconn.Close()    //nolint:errcheck
+		defer store.Close(ctx) //nolint:errcheck
+		defer repo.Close()     //nolint:errcheck
+
+		repoID := repo.Configuration().RepositoryID
+
+		log.Printf("cached: %s: starting job queue", repoID)
+		defer log.Printf("cached: %s: exiting job queue", repoID)
+
+		pingTicker := time.NewTicker(pluginPingInterval)
+		defer pingTicker.Stop()
+
+		teardown := func(reason string) {
+			log.Printf("cached: %s: tearing down job queue: %s", repoID, reason)
+			cmd.jobMtx.Lock()
+			delete(cmd.jobQueue, repoID)
+			cmd.jobMtx.Unlock()
+			close(jobChan)
+			for job := range jobChan {
+				if job.ch != nil {
+					job.ch <- fmt.Errorf("cached: job queue torn down: %s", reason)
+					close(job.ch)
+				}
+			}
+		}
+
+	jobLoop:
+		for {
+			select {
+			case job := <-jobChan:
+				var err error
+				if job.stateID == objects.NilMac {
+					log.Printf("cached: %s: rebuild state", repoID)
+					err = repo.RebuildState()
+				} else {
+					log.Printf("cached: %s: ingest state file %s", repoID, job.stateID.FormatHex())
+					err = repo.IngestStateFile(job.stateID)
+				}
+
+				if err != nil {
+					log.Printf("cached: %s: job failed: %v", repoID, err)
+				} else {
+					log.Printf("cached: %s: job done", repoID)
+				}
+
+				if job.ch != nil {
+					job.ch <- err
+					close(job.ch)
+				}
+
+				if isTransportDead(err) {
+					teardown(fmt.Sprintf("transport error on job: %v", err))
+					return
+				}
+
+			case <-pingTicker.C:
+				timeoutCtx, timeoutCancel := context.WithTimeout(ctx.Context, pluginPingTimeout)
+				pingErr := store.Ping(timeoutCtx)
+				timeoutCancel()
+				if pingErr != nil {
+					log.Printf("cached: %s: ping failed, plugin is unresponsive: %v", repoID, pingErr)
+					teardown(fmt.Sprintf("ping failed: %v", pingErr))
+					return
+				}
+				log.Printf("cached: %s: ping ok", repoID)
+
+			case <-pconn.Exited():
+				if exitErr := pconn.WaitErr(); exitErr != nil {
+					log.Printf("cached: %s: plugin process exited with error: %v", repoID, exitErr)
+				} else {
+					log.Printf("cached: %s: plugin process exited cleanly but unexpectedly", repoID)
+				}
+				teardown("plugin process exited")
+				return
+
+			case <-ctx.Done():
+				break jobLoop
+			}
+		}
+
+		cmd.jobMtx.Lock()
+		delete(cmd.jobQueue, repoID)
+		cmd.jobMtx.Unlock()
+	}()
+
+	return nil
+}
+
+func checkPassphrase(secret []byte, storageConfig []byte) ([]byte, error) {
+	config, err := storage.NewConfigurationFromWrappedBytes(storageConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	if config.Encryption == nil {
+		return nil, nil
+	}
+
+	key, err := encryption.DeriveKey(config.Encryption.KDFParams, secret)
+	if err != nil {
+		return nil, err
+	}
+
+	if !encryption.VerifyCanary(config.Encryption, key) {
+		return nil, errors.New("failed to verify key")
+	}
+
+	return key, nil
+}
+
+func isTransportDead(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	return status.Code(err) == codes.Unavailable
+}
+
+func isDisconnectError(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr) && netErr.Timeout()
+}
