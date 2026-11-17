@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-package main
+package cached
 
 import (
 	"context"
@@ -25,27 +25,21 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/PlakarKorp/integration-sdk"
-	"github.com/PlakarKorp/integration-sdk/client"
 	"github.com/PlakarKorp/kloset/caching"
 	"github.com/PlakarKorp/kloset/caching/pebble"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/kloset/kcontext"
 	klogging "github.com/PlakarKorp/kloset/logging"
-	"github.com/PlakarKorp/kloset/objects"
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/pkg"
-	"github.com/PlakarKorp/plakman"
-	"github.com/PlakarKorp/plakman/daemonize/logging"
-	"github.com/PlakarKorp/plakman/executor/cached"
-	"github.com/PlakarKorp/plakman/plugin"
+	"github.com/PlakarKorp/plaklet/logging"
+	"github.com/PlakarKorp/plaklet/plugin"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -56,10 +50,14 @@ import (
 const (
 	pluginPingInterval = 30 * time.Second
 	pluginPingTimeout  = 10 * time.Second
+	jobQueueIdleDelay  = 1 * time.Minute
 )
 
 type Cached struct {
+	pkgDir     string
+	cacheDir   string
 	socketPath string
+	registry   *plugin.Registry
 	listener   net.Listener
 
 	jobMtx   sync.Mutex
@@ -67,23 +65,48 @@ type Cached struct {
 }
 
 type jobReq struct {
-	stateID objects.MAC
+	stateID integration.MAC
 	ch      chan error
 }
 
-func runCached(ctx context.Context, cachedir string) error {
+func NewCached(cachedir string, pkgdir string) *Cached {
 	var cmd Cached
+	cmd.cacheDir = cachedir
+	cmd.pkgDir = pkgdir
 	cmd.socketPath = filepath.Join(cachedir, "cached.sock")
 	cmd.jobMtx = sync.Mutex{}
 	cmd.jobQueue = make(map[uuid.UUID]chan jobReq)
+	return &cmd
+}
 
+func RunCached(cachedir string, pkgdir string) error {
 	ktx := kcontext.NewKContext()
 	ktx.MaxConcurrency = 1
 	ktx.CacheDir = cachedir
 	ktx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
 	ktx.SetLogger(klogging.NewLogger(os.Stdout, os.Stderr))
+	return NewCached(cachedir, pkgdir).ListenAndServe(ktx)
+}
 
-	return cmd.ListenAndServe(ktx)
+func (cmd *Cached) reloadPlugins(ctx *kcontext.KContext) error {
+	registry := plugin.NewRegistry()
+	backend, err := pkg.NewFlatBackend(ctx, cmd.pkgDir, cmd.cacheDir, &pkg.FlatBackendOptions{
+		LoadHook: func(m *pkg.Manifest, p *pkg.Package, pkgdir string) {
+			if err := registry.RegisterPlugins(m, p, pkgdir); err != nil {
+				_ = err
+			}
+		},
+		UnloadHook: registry.UnregisterPlugins,
+	})
+	if err != nil {
+		return err
+	}
+	if err := backend.LoadAll(); err != nil {
+		return err
+	}
+
+	cmd.registry = registry
+	return nil
 }
 
 func (cmd *Cached) Close() error {
@@ -97,7 +120,7 @@ func (cmd *Cached) Close() error {
 }
 
 func (cmd *Cached) ListenAndServe(ctx *kcontext.KContext) error {
-	lock, err := cached.LockedFile(cmd.socketPath + ".cached-lock")
+	lock, err := LockedFile(cmd.socketPath + ".cached-lock")
 	if err != nil {
 		return errors.New("failed to obtain lock")
 	}
@@ -114,6 +137,10 @@ func (cmd *Cached) ListenAndServe(ctx *kcontext.KContext) error {
 
 	if err != nil {
 		return fmt.Errorf("failed to bind the socket: %w", err)
+	}
+
+	if err := cmd.reloadPlugins(ctx); err != nil {
+		return fmt.Errorf("failed to load plugins: %w", err)
 	}
 
 	cancelled := false
@@ -152,7 +179,7 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 	// handshake
 	var (
 		clientvers []byte
-		ourvers    = []byte(plakman.Version)
+		ourvers    = []byte(Version)
 	)
 	if err := decoder.Decode(&clientvers); err != nil {
 		return
@@ -161,7 +188,7 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 		return
 	}
 
-	pkt := &cached.RequestPkt{}
+	pkt := &RequestPkt{}
 	if err := decoder.Decode(pkt); err != nil {
 		if isDisconnectError(err) {
 			logging.Warn("client disconnected during initial request")
@@ -212,7 +239,7 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 		exitCode = -1
 	}
 
-	response := &cached.ResponsePkt{
+	response := &ResponsePkt{
 		ExitCode: exitCode,
 		Err:      errStr,
 	}
@@ -221,57 +248,47 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 	}
 }
 
-func (cmd *Cached) mkstore(pkgdir, pkgname, pkgver string, params map[string]string) (context.Context, integration.Store, plugin.ExitConn, error) {
-	plug := pkg.Package{
-		Name:            pkgname,
-		Version:         pkgver,
-		Architecture:    runtime.GOARCH,
-		OperatingSystem: runtime.GOOS,
-	}
-	plugdir := filepath.Join(pkgdir, strings.TrimSuffix(plug.Filename(), ".ptar"))
-	manifest, err := pkg.NewManifestFromFile(filepath.Join(plugdir, "manifest.yaml"))
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
+func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, params map[string]string) (context.Context, integration.Store, error) {
 	location := params["location"]
 	proto, _, _ := strings.Cut(location, "://")
 
-	for _, conn := range manifest.Connectors {
-		if conn.Type != integration.ConnectorTypeStorage {
-			continue
+	p, err := cmd.registry.GetPlugin(pkgname, pkgver, integration.ConnectorTypeStorage, proto)
+	if err != nil {
+		if errors.Is(err, plugin.ErrPluginNotExist) {
+			if err2 := cmd.reloadPlugins(ktx); err2 != nil {
+				logging.Warn("cached: failed to reload plugins: %v", err2)
+				return nil, nil, err
+			}
+			p, err = cmd.registry.GetPlugin(pkgname, pkgver, integration.ConnectorTypeStorage, proto)
 		}
-		if !slices.Contains(conn.Protocols, proto) {
-			continue
-		}
-
-		exe := filepath.Join(plugdir, conn.Executable)
-		// make sure exe is below the plugdir
-		if !strings.HasPrefix(exe, plugdir+"/") {
-			return nil, nil, nil, errors.New("executable path escapes")
-		}
-
-		ctx := context.Background()
-		clt, pconn, err := plugin.ConnectPlugin(exe, conn.Args)
 		if err != nil {
-			return nil, nil, nil, err
-		}
 
-		store, err := client.NewStorage(ctx, clt, proto, params)
-		if err != nil {
-			_ = pconn.Close()
-			return nil, nil, nil, err
-		}
+			// Check for builtins, we might want to remove that.
+			_, _, newStorage, _, found := integration.LookupStore(proto)
+			if found {
+				ctx := context.Background()
+				store, err := newStorage(ctx, proto, params)
+				if err != nil {
+					return nil, nil, err
+				}
+				return ctx, store, nil
+			}
 
-		return ctx, store, pconn, nil
+			return nil, nil, err
+		}
 	}
 
-	return nil, nil, nil, fmt.Errorf("failed to find the executable for %s@%s",
-		pkgname, pkgver)
+	ctx := context.Background()
+	store, err := p.NewStorage(ctx, proto, params)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return ctx, store, nil
 }
 
-func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *cached.RequestPkt) error {
-	_, store, pconn, err := cmd.mkstore(ctx.CacheDir, req.PluginName, req.PluginVersion, req.StoreConfig)
+func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *RequestPkt) error {
+	_, store, err := cmd.mkstore(ctx, req.PluginName, req.PluginVersion, req.StoreConfig)
 	if err != nil {
 		return fmt.Errorf("failed to run storage: %w", err)
 	}
@@ -279,21 +296,18 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 	serializedConfig, err := store.Open(ctx)
 	if err != nil {
 		_ = store.Close(ctx)
-		_ = pconn.Close()
 		return fmt.Errorf("failed to open storage: %w", err)
 	}
 
 	key, err := checkPassphrase(req.Secret, serializedConfig)
 	if err != nil {
 		_ = store.Close(ctx)
-		_ = pconn.Close()
 		return fmt.Errorf("incorrect passphrase %s: %w", string(req.Secret), err)
 	}
 
 	repo, err := repository.NewRepository(ctx, key, store, serializedConfig, &repository.RepositoryOpts{RWStateCache: true})
 	if err != nil {
 		_ = store.Close(ctx)
-		_ = pconn.Close()
 		return fmt.Errorf("failed to open repository: %w", err)
 	}
 
@@ -302,12 +316,10 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 			repo.Configuration().RepositoryID.String())
 		_ = repo.Close()
 		_ = store.Close(ctx)
-		_ = pconn.Close()
 		return err
 	}
 
 	go func() {
-		defer pconn.Close()    //nolint:errcheck
 		defer store.Close(ctx) //nolint:errcheck
 		defer repo.Close()     //nolint:errcheck
 
@@ -333,12 +345,11 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 			}
 		}
 
-	jobLoop:
 		for {
 			select {
 			case job := <-jobChan:
 				var err error
-				if job.stateID == objects.NilMac {
+				if job.stateID == integration.NilMac {
 					log.Printf("cached: %s: rebuild state", repoID)
 					err = repo.RebuildState()
 				} else {
@@ -362,34 +373,15 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 					return
 				}
 
-			case <-pingTicker.C:
-				timeoutCtx, timeoutCancel := context.WithTimeout(ctx.Context, pluginPingTimeout)
-				pingErr := store.Ping(timeoutCtx)
-				timeoutCancel()
-				if pingErr != nil {
-					log.Printf("cached: %s: ping failed, plugin is unresponsive: %v", repoID, pingErr)
-					teardown(fmt.Sprintf("ping failed: %v", pingErr))
-					return
-				}
-				log.Printf("cached: %s: ping ok", repoID)
-
-			case <-pconn.Exited():
-				if exitErr := pconn.WaitErr(); exitErr != nil {
-					log.Printf("cached: %s: plugin process exited with error: %v", repoID, exitErr)
-				} else {
-					log.Printf("cached: %s: plugin process exited cleanly but unexpectedly", repoID)
-				}
-				teardown("plugin process exited")
+			case <-time.After(jobQueueIdleDelay):
+				teardown("idle out")
 				return
 
 			case <-ctx.Done():
-				break jobLoop
+				teardown("context canceled")
+				return
 			}
 		}
-
-		cmd.jobMtx.Lock()
-		delete(cmd.jobQueue, repoID)
-		cmd.jobMtx.Unlock()
 	}()
 
 	return nil
