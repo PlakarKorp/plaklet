@@ -24,13 +24,13 @@ func test(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 }
 
 func testStore(ctx *kcontext.KContext, target *Configuration) error {
-	store, passphrase, _, err := mkstorage(ctx, target)
+	store, passphrase, storeConfig, err := mkstorage(ctx, target)
 	if err != nil {
 		return err
 	}
 	defer ensureClose(ctx, store)
 
-	repo, err := openrepo(ctx, store, passphrase)
+	repo, err := openrepo(ctx, target, store, passphrase, storeConfig, false)
 	if err != nil {
 		return err
 	}

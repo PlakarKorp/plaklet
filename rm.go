@@ -50,13 +50,13 @@ func rm(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return &Report{Type: "rm", Rm: &RmReport{}}, nil
 	}
 
-	store, passphrase, _, err := mkstorage(ctx, input.Source)
+	store, passphrase, storeConfig, err := mkstorage(ctx, input.Source)
 	if err != nil {
 		return nil, err
 	}
 	defer ensureClose(ctx, store)
 
-	repo, err := openrepo(ctx, store, passphrase)
+	repo, err := openrepo(ctx, input.Source, store, passphrase, storeConfig, true)
 	if err != nil {
 		return nil, err
 	}

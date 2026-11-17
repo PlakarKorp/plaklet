@@ -12,6 +12,7 @@ import (
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/kloset/snapshot"
 	"github.com/PlakarKorp/kloset/snapshot/vfs"
+	"github.com/PlakarKorp/plaklet/cached"
 )
 
 // backup runs a source -> store backup, mirroring the plakman executor's backup
@@ -32,15 +33,28 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 	}
 	defer ensureClose(ctx, imp)
 
-	store, passphrase, _, err := mkstorage(ctx, input.Target)
+	store, passphrase, storeConfig, err := mkstorage(ctx, input.Target)
 	if err != nil {
 		return nil, err
 	}
 	defer ensureClose(ctx, store)
 
-	repo, err := openrepo(ctx, store, passphrase)
+	repo, err := openrepo(ctx, input.Target, store, passphrase, storeConfig, true)
 	if err != nil {
 		return nil, err
+	}
+
+	refreshState := func(mac objects.MAC, finalRefresh bool) error {
+		// If we are in the final refresh, turn this request into a fire and
+		// forget one, to improve the UX.
+		var secret []byte
+		if passphrase != "" {
+			secret = []byte(passphrase)
+		}
+		_, err := cached.RebuildStateFromStateFile(ctx, mac, repo.Configuration().RepositoryID,
+			storeConfig, secret, finalRefresh,
+			input.Target.Integration.Name, input.Target.Integration.Version)
+		return err
 	}
 
 	opts := &snapshot.BuilderOptions{
@@ -54,9 +68,7 @@ func backup(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		// the edge has no daemon, so we rebuild in-process (the daemon itself just
 		// calls repo.RebuildState()). Without this, aggregated state is only
 		// rebuilt lazily at next open and grows unbounded per run.
-		StateRefresher: func(_ objects.MAC, _ bool) error {
-			return repo.RebuildState()
-		},
+		StateRefresher: refreshState,
 	}
 
 	packfileTmpDir, err := os.MkdirTemp(os.Getenv("PACKFILES_BUILD_DIR"), "plaklet-pack-*")

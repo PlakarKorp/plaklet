@@ -18,6 +18,7 @@ import (
 	"github.com/PlakarKorp/kloset/encryption"
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/repository"
+	"github.com/PlakarKorp/plaklet/cached"
 	"github.com/PlakarKorp/plaklet/plugin"
 )
 
@@ -109,7 +110,7 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 // plakman executor it does not go through the cached daemon: repository.New
 // rebuilds the state in-process, which is what an edge (with no local cached
 // daemon) needs.
-func openrepo(ctx *kcontext.KContext, store storage.Store, passphrase string) (*repository.Repository, error) {
+func openrepo(ctx *kcontext.KContext, target *Configuration, store integration.Store, passphrase string, storeConfig map[string]string, rebuidState bool) (*repository.Repository, error) {
 	serializedConfig, err := store.Open(ctx)
 	if err != nil {
 		return nil, err
@@ -131,7 +132,18 @@ func openrepo(ctx *kcontext.KContext, store storage.Store, passphrase string) (*
 		}
 	}
 
-	return repository.New(ctx, key, store, serializedConfig)
+	repo, err := repository.NewRepository(ctx, key, store, serializedConfig, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if rebuidState {
+		if _, err := cached.RebuildStateFromStore(ctx, repo.Configuration().RepositoryID, storeConfig, []byte(passphrase), false, target.Integration.Name, target.Integration.Version); err != nil {
+			return nil, err
+		}
+	}
+
+	return repo, nil
 }
 
 func ensureClose(ctx context.Context, closer Closer) {
