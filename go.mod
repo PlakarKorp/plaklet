@@ -3,11 +3,10 @@ module github.com/PlakarKorp/plaklet
 go 1.26.10
 
 require (
-	github.com/PlakarKorp/integration-sdk v1.1.4
-	github.com/PlakarKorp/integrations/fs v1.1.11-0.20261105083541-b2996ec3e4f8
-	github.com/PlakarKorp/integrations/tar v1.1.3-0.20261105082016-13b17a805bf3
-	github.com/PlakarKorp/kloset v1.1.16-rc.2
-	github.com/PlakarKorp/pkg v1.1.11
+	github.com/PlakarKorp/integration-sdk v1.1.5
+	github.com/PlakarKorp/integrations/fs v1.1.12
+	github.com/PlakarKorp/kloset v1.1.16-rc.4
+	github.com/PlakarKorp/pkg v1.1.12
 	github.com/dustin/go-humanize v1.1.0
 	github.com/google/uuid v1.6.0
 	github.com/shirou/gopsutil/v4 v4.26.6
@@ -20,7 +19,7 @@ require (
 	github.com/PlakarKorp/aes-gcm-siv v0.1.0 // indirect
 	github.com/PlakarKorp/go-cdc-chunkers v1.1.0 // indirect
 	github.com/PlakarKorp/go-human2duration v0.1.6 // indirect
-	github.com/PlakarKorp/integrations/ptar v1.1.3-0.20261104201232-8e9dc877ede0 // indirect
+	github.com/PlakarKorp/integrations/ptar v1.1.3 // indirect
 	github.com/RaduBerinde/axisds v0.1.0 // indirect
 	github.com/RaduBerinde/btreemap v0.0.0-20250419232817-bf0d809ae648 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
