@@ -124,7 +124,7 @@ func TestOpenrepo(t *testing.T) {
 	// the canary.
 	dir = filepath.Join(t.TempDir(), "repo")
 	store := fsConf(uuid.Nil, "storage", dir, ConfigurationField{Key: "passphrase", Val: "secret"})
-	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: store}, nil)
+	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: store})
 	require.NoError(t, err)
 	st, pass, storeConfig, err := mkstorage(ctx, store)
 	require.NoError(t, err)
