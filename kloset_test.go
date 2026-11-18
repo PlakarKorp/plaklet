@@ -102,20 +102,22 @@ func TestMkstorage(t *testing.T) {
 
 func TestOpenrepo(t *testing.T) {
 	ctx := newTestContext(t)
+	conf := fsConf(uuid.Nil, "storage", filepath.Join(t.TempDir(), "missing"))
 
 	// Store open fails: nothing at the location.
-	st, _, _, err := mkstorage(ctx, fsConf(uuid.Nil, "storage", filepath.Join(t.TempDir(), "missing")))
+	st, _, cfg, err := mkstorage(ctx, conf)
 	require.NoError(t, err)
-	_, err = openrepo(ctx, st, "")
+	_, err = openrepo(ctx, conf, st, "", cfg, false)
 	require.Error(t, err)
 
 	// A CONFIG that does not deserialize.
 	dir := filepath.Join(t.TempDir(), "repo")
 	createFSRepo(t, ctx, dir)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "CONFIG"), []byte("garbage"), 0o644))
-	st, _, _, err = mkstorage(ctx, fsConf(uuid.Nil, "storage", dir))
+	conf = fsConf(uuid.Nil, "storage", dir)
+	st, _, _, err = mkstorage(ctx, conf)
 	require.NoError(t, err)
-	_, err = openrepo(ctx, st, "")
+	_, err = openrepo(ctx, conf, st, "", cfg, false)
 	require.Error(t, err)
 
 	// An encrypted store: the right passphrase opens it, the wrong one trips
@@ -124,12 +126,12 @@ func TestOpenrepo(t *testing.T) {
 	store := fsConf(uuid.Nil, "storage", dir, ConfigurationField{Key: "passphrase", Val: "secret"})
 	_, err = dispatch(ctx, &ExecPayload{Op: "create", Source: store}, nil)
 	require.NoError(t, err)
-	st, pass, _, err := mkstorage(ctx, store)
+	st, pass, storeConfig, err := mkstorage(ctx, store)
 	require.NoError(t, err)
-	repo, err := openrepo(ctx, st, pass)
+	repo, err := openrepo(ctx, store, st, pass, storeConfig, false)
 	require.NoError(t, err)
 	require.NoError(t, repo.Close())
-	_, err = openrepo(ctx, st, "wrong")
+	_, err = openrepo(ctx, store, st, "wrong", storeConfig, false)
 	require.Error(t, err)
 	require.NoError(t, st.Close(ctx))
 
@@ -139,9 +141,10 @@ func TestOpenrepo(t *testing.T) {
 		c.Encryption = encryption.NewDefaultConfiguration()
 		c.Encryption.KDFParams.KDF = "BOGUS"
 	})
-	st, _, _, err = mkstorage(ctx, fsConf(uuid.Nil, "storage", dir))
+	conf = fsConf(uuid.Nil, "storage", dir)
+	st, _, storeConfig, err = mkstorage(ctx, conf)
 	require.NoError(t, err)
-	_, err = openrepo(ctx, st, "secret")
+	_, err = openrepo(ctx, conf, st, "secret", storeConfig, false)
 	require.Error(t, err)
 }
 
