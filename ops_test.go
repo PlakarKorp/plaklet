@@ -55,10 +55,10 @@ func dropPackfiles(t *testing.T, store *Configuration) {
 // lockExclusively leaves a fresh exclusive (maintenance) lock in the store.
 func lockExclusively(t *testing.T, ctx *kcontext.KContext, store *Configuration) {
 	t.Helper()
-	st, pass, _, err := mkstorage(ctx, store)
+	st, pass, storeConfig, err := mkstorage(ctx, store)
 	require.NoError(t, err)
 	defer st.Close(ctx)
-	repo, err := openrepo(ctx, st, pass)
+	repo, err := openrepo(ctx, store, st, pass, storeConfig, false)
 	require.NoError(t, err)
 	var buf bytes.Buffer
 	require.NoError(t, repository.NewExclusiveLock("test").SerializeToStream(&buf))

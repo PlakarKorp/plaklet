@@ -20,24 +20,24 @@ func synchronize(ctx *kcontext.KContext, input *ExecPayload) (*Report, error) {
 		return nil, fmt.Errorf("source and target must be set for sync")
 	}
 
-	srcStore, srcPass, _, err := mkstorage(ctx, input.Source)
+	srcStore, srcPass, srcStoreConfig, err := mkstorage(ctx, input.Source)
 	if err != nil {
 		return nil, err
 	}
 	defer ensureClose(ctx, srcStore)
 
-	srcRepo, err := openrepo(ctx, srcStore, srcPass)
+	srcRepo, err := openrepo(ctx, input.Source, srcStore, srcPass, srcStoreConfig, true)
 	if err != nil {
 		return nil, err
 	}
 
-	dstStore, dstPass, _, err := mkstorage(ctx, input.Target)
+	dstStore, dstPass, dstStoreConfig, err := mkstorage(ctx, input.Target)
 	if err != nil {
 		return nil, err
 	}
 	defer ensureClose(ctx, dstStore)
 
-	dstRepo, err := openrepo(ctx, dstStore, dstPass)
+	dstRepo, err := openrepo(ctx, input.Target, dstStore, dstPass, dstStoreConfig, true)
 	if err != nil {
 		return nil, err
 	}

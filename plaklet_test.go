@@ -2,6 +2,7 @@ package plaklet
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -14,7 +15,14 @@ import (
 	"time"
 
 	"github.com/PlakarKorp/integration-sdk"
+	_ "github.com/PlakarKorp/integrations/fs/importer"
+	_ "github.com/PlakarKorp/integrations/fs/storage"
+	"github.com/PlakarKorp/kloset/caching"
+	"github.com/PlakarKorp/kloset/caching/pebble"
 	"github.com/PlakarKorp/kloset/events"
+	"github.com/PlakarKorp/kloset/kcontext"
+	"github.com/PlakarKorp/kloset/logging"
+	"github.com/PlakarKorp/plaklet/cached"
 	"github.com/PlakarKorp/plaklet/plugin"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -115,6 +123,18 @@ func TestMainPackages(t *testing.T) {
 func TestMainPayload(t *testing.T) {
 	cache := t.TempDir()
 
+	cd := cached.NewCached(cache, t.TempDir())
+	go func() {
+		ctx := kcontext.NewKContext()
+		ctx.CacheDir = cache
+		ctx.MaxConcurrency = 1
+		ctx.SetLogger(logging.NewLogger(io.Discard, io.Discard))
+		ctx.SetCache(caching.NewManager(pebble.Constructor(cache)))
+
+		_ = cd.ListenAndServe(ctx)
+	}()
+	t.Cleanup(func() { _ = cd.Close() })
+
 	// Not JSON.
 	code, _ := runMain(t, []string{"-cache", cache}, "{not json")
 	require.Equal(t, 1, code)
@@ -160,7 +180,7 @@ func TestMainPayload(t *testing.T) {
 	source := fsConf(uuid.MustParse("11111111-1111-1111-1111-111111111111"), "importer", srcDir)
 	code, replies = runMain(t, []string{"-cache", cache}, payload(t, &ExecPayload{Op: "backup", Source: source, Target: store}))
 	require.Equal(t, 0, code)
-	require.Equal(t, ReplySuccess, lastReply(replies).Type)
+	require.Equal(t, ReplySuccess, lastReply(replies).Type, "%s", lastReply(replies).Message)
 }
 
 // TestStateSampler runs the sampler long enough for its ticker to fire, then

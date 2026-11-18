@@ -17,6 +17,7 @@ import (
 	"github.com/PlakarKorp/kloset/logging"
 	"github.com/PlakarKorp/kloset/resources"
 	"github.com/PlakarKorp/kloset/versioning"
+	"github.com/PlakarKorp/plaklet/cached"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -31,6 +32,11 @@ func newTestContext(t *testing.T) *kcontext.KContext {
 	ctx.MaxConcurrency = 4
 	ctx.SetLogger(logging.NewLogger(io.Discard, io.Discard))
 	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
+
+	cd := cached.NewCached(cachedir, t.TempDir())
+	go func() {
+		_ = cd.ListenAndServe(ctx)
+	}()
 
 	// kloset blocks publishing progress once the event buffer fills, so the bus
 	// must be drained for the duration of any op (main() does this via the
@@ -47,6 +53,7 @@ func newTestContext(t *testing.T) *kcontext.KContext {
 		bus.Close()
 		<-drained
 		ctx.GetCache().Close()
+		_ = cd.Close()
 	})
 	return ctx
 }
@@ -352,7 +359,16 @@ func TestBackupStateFromEvents(t *testing.T) {
 	ctx.MaxConcurrency = 4
 	ctx.SetLogger(logging.NewLogger(io.Discard, io.Discard))
 	ctx.SetCache(caching.NewManager(pebble.Constructor(cachedir)))
-	t.Cleanup(func() { ctx.GetCache().Close() })
+
+	cd := cached.NewCached(cachedir, t.TempDir())
+	go func() {
+		_ = cd.ListenAndServe(ctx)
+	}()
+
+	t.Cleanup(func() {
+		ctx.GetCache().Close()
+		_ = cd.Close()
+	})
 
 	listener := NewEventListener(false)
 	listener.Run(ctx.Events())
