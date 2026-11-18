@@ -48,9 +48,7 @@ import (
 )
 
 const (
-	pluginPingInterval = 30 * time.Second
-	pluginPingTimeout  = 10 * time.Second
-	jobQueueIdleDelay  = 1 * time.Minute
+	jobQueueIdleDelay = 1 * time.Minute
 )
 
 type Cached struct {
@@ -252,6 +250,19 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 	location := params["location"]
 	proto, _, _ := strings.Cut(location, "://")
 
+	// Use builtin integrations right away.
+	// This is necessary for fs because it is also packaged but the packaged
+	// version is just a placeholder and will always fail.
+	_, _, newStorage, _, found := integration.LookupStore(proto)
+	if found {
+		ctx := context.Background()
+		store, err := newStorage(ctx, proto, params)
+		if err != nil {
+			return nil, nil, err
+		}
+		return ctx, store, nil
+	}
+
 	p, err := cmd.registry.GetPlugin(pkgname, pkgver, integration.ConnectorTypeStorage, proto)
 	if err != nil {
 		if errors.Is(err, plugin.ErrPluginNotExist) {
@@ -262,18 +273,6 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 			p, err = cmd.registry.GetPlugin(pkgname, pkgver, integration.ConnectorTypeStorage, proto)
 		}
 		if err != nil {
-
-			// Check for builtins, we might want to remove that.
-			_, _, newStorage, _, found := integration.LookupStore(proto)
-			if found {
-				ctx := context.Background()
-				store, err := newStorage(ctx, proto, params)
-				if err != nil {
-					return nil, nil, err
-				}
-				return ctx, store, nil
-			}
-
 			return nil, nil, err
 		}
 	}
@@ -327,9 +326,6 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 
 		log.Printf("cached: %s: starting job queue", repoID)
 		defer log.Printf("cached: %s: exiting job queue", repoID)
-
-		pingTicker := time.NewTicker(pluginPingInterval)
-		defer pingTicker.Stop()
 
 		teardown := func(reason string) {
 			log.Printf("cached: %s: tearing down job queue: %s", repoID, reason)
