@@ -38,7 +38,6 @@ import (
 	klogging "github.com/PlakarKorp/kloset/logging"
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/pkg"
-	"github.com/PlakarKorp/plaklet/logging"
 	"github.com/PlakarKorp/plaklet/plugin"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
@@ -189,14 +188,14 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 	pkt := &RequestPkt{}
 	if err := decoder.Decode(pkt); err != nil {
 		if isDisconnectError(err) {
-			logging.Warn("client disconnected during initial request")
+			log.Printf("client disconnected during initial request")
 			return
 		}
-		logging.Warn("Failed to decode RPC: %v", err)
+		log.Printf("failed to decode RPC: %v", err)
 		return
 	}
 
-	logging.Info("cached: rebuild request for %s", pkt.RepoID)
+	log.Printf("rebuild request for %s", pkt.RepoID)
 
 	// Is there already a job goroutine running for this repo:
 	var jq chan jobReq
@@ -232,7 +231,7 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 	errStr := ""
 	exitCode := 0
 	if err != nil {
-		log.Printf("cached: request failed for %s: %v", pkt.RepoID, err)
+		log.Printf("request failed for %s: %v", pkt.RepoID, err)
 		errStr = err.Error()
 		exitCode = -1
 	}
@@ -242,7 +241,7 @@ func (cmd *Cached) handleCachedClient(ctx *kcontext.KContext, conn net.Conn) {
 		Err:      errStr,
 	}
 	if err := encoder.Encode(&response); err != nil {
-		logging.Warn("client write error: %v", err)
+		log.Printf("client write error: %v", err)
 	}
 }
 
@@ -253,7 +252,7 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 	// Use builtin integrations right away.
 	// This is necessary for fs because it is also packaged but the packaged
 	// version is just a placeholder and will always fail.
-	_, _, newStorage, _, found := integration.LookupStore(proto)
+	_, _, newStorage, _, found := integration.LookupStore(location)
 	if found {
 		ctx := context.Background()
 		store, err := newStorage(ctx, proto, params)
@@ -267,7 +266,7 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 	if err != nil {
 		if errors.Is(err, plugin.ErrPluginNotExist) {
 			if err2 := cmd.reloadPlugins(ktx); err2 != nil {
-				logging.Warn("cached: failed to reload plugins: %v", err2)
+				log.Printf("mkstore: failed to reload plugins: %v", err2)
 				return nil, nil, err
 			}
 			p, err = cmd.registry.GetPlugin(pkgname, pkgver, integration.ConnectorTypeStorage, proto)
@@ -324,11 +323,11 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 
 		repoID := repo.Configuration().RepositoryID
 
-		log.Printf("cached: %s: starting job queue", repoID)
-		defer log.Printf("cached: %s: exiting job queue", repoID)
+		log.Printf("%s: starting job queue", repoID)
+		defer log.Printf("%s: exiting job queue", repoID)
 
 		teardown := func(reason string) {
-			log.Printf("cached: %s: tearing down job queue: %s", repoID, reason)
+			log.Printf("%s: tearing down job queue: %s", repoID, reason)
 			cmd.jobMtx.Lock()
 			delete(cmd.jobQueue, repoID)
 			cmd.jobMtx.Unlock()
@@ -346,17 +345,17 @@ func (cmd *Cached) rebuildJob(ctx *kcontext.KContext, jobChan chan jobReq, req *
 			case job := <-jobChan:
 				var err error
 				if job.stateID == integration.NilMac {
-					log.Printf("cached: %s: rebuild state", repoID)
+					log.Printf("%s: rebuild state", repoID)
 					err = repo.RebuildState()
 				} else {
-					log.Printf("cached: %s: ingest state file %s", repoID, job.stateID.FormatHex())
+					log.Printf("%s: ingest state file %s", repoID, job.stateID.FormatHex())
 					err = repo.IngestStateFile(job.stateID)
 				}
 
 				if err != nil {
-					log.Printf("cached: %s: job failed: %v", repoID, err)
+					log.Printf("%s: job failed: %v", repoID, err)
 				} else {
-					log.Printf("cached: %s: job done", repoID)
+					log.Printf("%s: job done", repoID)
 				}
 
 				if job.ch != nil {
