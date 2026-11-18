@@ -252,7 +252,7 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 	// Use builtin integrations right away.
 	// This is necessary for fs because it is also packaged but the packaged
 	// version is just a placeholder and will always fail.
-	_, _, newStorage, _, found := integration.LookupStore(proto)
+	_, _, newStorage, _, found := integration.LookupStore(location)
 	if found {
 		ctx := context.Background()
 		store, err := newStorage(ctx, proto, params)
