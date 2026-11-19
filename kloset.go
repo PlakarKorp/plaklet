@@ -20,6 +20,7 @@ import (
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/plaklet/cached"
 	"github.com/PlakarKorp/plaklet/plugin"
+	"github.com/PlakarKorp/plaklet/runner"
 )
 
 const closeDelay time.Duration = time.Minute
@@ -58,7 +59,7 @@ func mkimporter(ctx *kcontext.KContext, conf *Configuration, ignores []string) (
 	}
 
 	if p, err := pluginFor(conf, integration.ConnectorTypeImporter); err == nil {
-		return p.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
+		return runner.ForPlugin(p).NewImporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func mkexporter(ctx *kcontext.KContext, conf *Configuration) (exporter.Exporter,
 	}
 
 	if p, err := pluginFor(conf, integration.ConnectorTypeExporter); err == nil {
-		return p.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
+		return runner.ForPlugin(p).NewExporter(ctx, protocolOf(conf), conf.params(), opts)
 	} else if err != plugin.ErrPluginNotExist {
 		return nil, err
 	}
@@ -97,7 +98,7 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 	} else {
 		var p *plugin.Plugin
 		if p, err = pluginFor(conf, integration.ConnectorTypeStorage); err == nil {
-			store, err = p.NewStorage(ctx, protocolOf(conf), params)
+			store, err = runner.ForPlugin(p).NewStore(ctx, protocolOf(conf), params)
 		}
 	}
 	if err != nil {

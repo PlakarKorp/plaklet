@@ -8,6 +8,7 @@ import (
 
 	"github.com/PlakarKorp/integration-sdk"
 	"github.com/PlakarKorp/kloset/kcontext"
+	"github.com/PlakarKorp/plaklet/runner"
 )
 
 func mkinventory(ctx *kcontext.KContext, conf *Configuration) (integration.Inventory, error) {
@@ -15,7 +16,7 @@ func mkinventory(ctx *kcontext.KContext, conf *Configuration) (integration.Inven
 	if err != nil {
 		return nil, err
 	}
-	return p.NewInventory(ctx, protocolOf(conf), conf.params())
+	return runner.ForPlugin(p).NewInventory(ctx, conf.params())
 }
 
 // listInventory runs the inventory plugin the source names and streams every
