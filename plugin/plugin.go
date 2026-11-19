@@ -56,10 +56,14 @@ func (p *Plugin) key() pluginKey {
 	return makePluginKey(p.Name, p.Version, p.Type, p.Protocol)
 }
 
-func (p *Plugin) Connect() (grpc.ClientConnInterface, net.Conn, error) {
+func (p *Plugin) Spawn() (net.Conn, error) {
 	cmd := exec.Command(p.Exec, p.Args...)
 	cmd.Stderr = os.Stderr
-	conn, err := stdioconn.Spawn(cmd)
+	return stdioconn.Spawn(cmd)
+}
+
+func (p *Plugin) Connect() (grpc.ClientConnInterface, net.Conn, error) {
+	conn, err := p.Spawn()
 	if err != nil {
 		return nil, nil, err
 	}

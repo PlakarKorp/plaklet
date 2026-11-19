@@ -72,7 +72,7 @@ func TestPluginConnCloseError(t *testing.T) {
 
 func TestConnectFailsToSpawn(t *testing.T) {
 	p := fakePlugin(t, "importer", integration.ConnectorTypeImporter, t.TempDir()+"/missing")
-	_, _, err := p.Connect()
+	_, err := p.Spawn()
 	require.Error(t, err)
 }
 
