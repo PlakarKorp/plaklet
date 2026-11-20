@@ -63,3 +63,11 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 func pluginFor(conf *Configuration, connType integration.ConnectorType) (*plugin.Plugin, error) {
 	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, protocolOf(conf))
 }
+
+func runnerFor(conf *Configuration, connType integration.ConnectorType) (runner.Runner, error) {
+	p, err := pluginFor(conf, connType)
+	if err != nil {
+		return nil, err
+	}
+	return runner.ForPlugin(p), nil
+}
