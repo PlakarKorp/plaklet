@@ -9,6 +9,7 @@ import (
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/plugin"
+	"github.com/PlakarKorp/plaklet/runner"
 )
 
 // pluginRegistry holds the out-of-process connector plugins loaded from .ptar
@@ -25,7 +26,7 @@ func registerStorage(name, version, proto string, flags location.Flags) error {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get plugin: %w", err)
 		}
-		return p.NewStorage(ctx, proto, config)
+		return runner.ForPlugin(p).NewStore(ctx, proto, config)
 	})
 }
 
@@ -61,4 +62,12 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 // integration name/version, connector type, and protocol (from the location).
 func pluginFor(conf *Configuration, connType integration.ConnectorType) (*plugin.Plugin, error) {
 	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, protocolOf(conf))
+}
+
+func runnerFor(conf *Configuration, connType integration.ConnectorType) (runner.Runner, error) {
+	p, err := pluginFor(conf, connType)
+	if err != nil {
+		return nil, err
+	}
+	return runner.ForPlugin(p), nil
 }

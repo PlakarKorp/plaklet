@@ -19,7 +19,7 @@ import (
 	"github.com/PlakarKorp/kloset/kcontext"
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/plaklet/cached"
-	"github.com/PlakarKorp/plaklet/plugin"
+	"github.com/PlakarKorp/plaklet/runner"
 )
 
 const closeDelay time.Duration = time.Minute
@@ -57,12 +57,12 @@ func mkimporter(ctx *kcontext.KContext, conf *Configuration, ignores []string) (
 		return fsImporter.NewFSImporter(ctx, opts, "fs", conf.params())
 	}
 
-	if p, err := pluginFor(conf, integration.ConnectorTypeImporter); err == nil {
-		return p.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
-	} else if err != plugin.ErrPluginNotExist {
+	r, err := runnerFor(conf, integration.ConnectorTypeImporter)
+	if err != nil {
 		return nil, err
 	}
-	return importer.NewImporter(ctx, opts, conf.params())
+
+	return r.NewImporter(ctx, protocolOf(conf), conf.params(), opts)
 }
 
 // mkexporter builds a destination exporter, preferring a loaded plugin and
@@ -74,12 +74,12 @@ func mkexporter(ctx *kcontext.KContext, conf *Configuration) (exporter.Exporter,
 		return fsExporter.NewFSExporter(ctx, opts, "fs", conf.params())
 	}
 
-	if p, err := pluginFor(conf, integration.ConnectorTypeExporter); err == nil {
-		return p.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
-	} else if err != plugin.ErrPluginNotExist {
+	r, err := runnerFor(conf, integration.ConnectorTypeExporter)
+	if err != nil {
 		return nil, err
 	}
-	return exporter.NewExporter(ctx, opts, conf.params())
+
+	return r.NewExporter(ctx, protocolOf(conf), conf.params(), opts)
 }
 
 // mkstorage opens the store described by a resolved connector config and returns
@@ -95,9 +95,9 @@ func mkstorage(ctx *kcontext.KContext, conf *Configuration) (storage.Store, stri
 	if conf.Integration.Name == "fs" {
 		store, err = fsStorage.NewStore(ctx, "fs", params)
 	} else {
-		var p *plugin.Plugin
-		if p, err = pluginFor(conf, integration.ConnectorTypeStorage); err == nil {
-			store, err = p.NewStorage(ctx, protocolOf(conf), params)
+		var r runner.Runner
+		if r, err = runnerFor(conf, integration.ConnectorTypeStorage); err == nil {
+			store, err = r.NewStore(ctx, protocolOf(conf), params)
 		}
 	}
 	if err != nil {
