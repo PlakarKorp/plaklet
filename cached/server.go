@@ -39,6 +39,7 @@ import (
 	"github.com/PlakarKorp/kloset/repository"
 	"github.com/PlakarKorp/pkg"
 	"github.com/PlakarKorp/plaklet/plugin"
+	"github.com/PlakarKorp/plaklet/connector"
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -277,7 +278,7 @@ func (cmd *Cached) mkstore(ktx *kcontext.KContext, pkgname, pkgver string, param
 	}
 
 	ctx := context.Background()
-	store, err := p.NewStorage(ctx, proto, params)
+	store, err := connector.ForPlugin(p).NewStore(ctx, proto, params)
 	if err != nil {
 		return nil, nil, err
 	}

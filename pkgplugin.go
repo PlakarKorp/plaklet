@@ -8,6 +8,7 @@ import (
 	"github.com/PlakarKorp/integration-sdk/location"
 	"github.com/PlakarKorp/kloset/connectors/storage"
 	"github.com/PlakarKorp/pkg"
+	"github.com/PlakarKorp/plaklet/connector"
 	"github.com/PlakarKorp/plaklet/plugin"
 )
 
@@ -25,7 +26,7 @@ func registerStorage(name, version, proto string, flags location.Flags) error {
 		if err != nil {
 			return nil, fmt.Errorf("failed to get plugin: %w", err)
 		}
-		return p.NewStorage(ctx, proto, config)
+		return connector.ForPlugin(p).NewStore(ctx, proto, config)
 	})
 }
 
@@ -61,4 +62,12 @@ func pkgUnloadHook(m *pkg.Manifest, p *pkg.Package) {
 // integration name/version, connector type, and protocol (from the location).
 func pluginFor(conf *Configuration, connType integration.ConnectorType) (*plugin.Plugin, error) {
 	return pluginRegistry.GetPlugin(conf.Integration.Name, conf.Integration.Version, connType, protocolOf(conf))
+}
+
+func factoryFor(conf *Configuration, connType integration.ConnectorType) (connector.Factory, error) {
+	p, err := pluginFor(conf, connType)
+	if err != nil {
+		return nil, err
+	}
+	return connector.ForPlugin(p), nil
 }

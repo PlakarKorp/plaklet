@@ -2,7 +2,6 @@ package plugin
 
 import (
 	"bytes"
-	"errors"
 	"log"
 	"testing"
 
@@ -65,105 +64,8 @@ func TestRegistry(t *testing.T) {
 	require.Contains(t, buf.String(), "unregister plugin")
 }
 
-func TestPluginConnCloseError(t *testing.T) {
-	require.Equal(t, "x: [close:ok] [conn:ok]", PluginConnCloseError{Name: "x"}.Error())
-	require.Equal(t, "x: [close:a] [conn:b]", PluginConnCloseError{Name: "x", CloseErr: errors.New("a"), ConnCloseErr: errors.New("b")}.Error())
-}
-
 func TestConnectFailsToSpawn(t *testing.T) {
 	p := fakePlugin(t, "importer", integration.ConnectorTypeImporter, t.TempDir()+"/missing")
-	_, _, err := p.Connect()
+	_, err := p.Spawn()
 	require.Error(t, err)
-}
-
-func TestNewImporter(t *testing.T) {
-	ctx := t.Context()
-	opts := &integration.Options{MaxConcurrency: 1}
-
-	_, err := fakePlugin(t, "importer", integration.ConnectorTypeExporter, "").NewImporter(ctx, "fake", nil, opts)
-	require.ErrorIs(t, err, ErrPluginTypeMismatch)
-	_, err = fakePlugin(t, "importer", integration.ConnectorTypeImporter, "/missing").NewImporter(ctx, "fake", nil, opts)
-	require.Error(t, err)
-	_, err = fakePlugin(t, "exit", integration.ConnectorTypeImporter, "").NewImporter(ctx, "fake", nil, opts)
-	require.Error(t, err, "a plugin that dies before answering")
-	_, err = fakePlugin(t, "importer", integration.ConnectorTypeImporter, "").NewImporter(ctx, "fake", map[string]string{"fail": "init"}, opts)
-	require.Error(t, err)
-
-	imp, err := fakePlugin(t, "importer", integration.ConnectorTypeImporter, "").NewImporter(ctx, "fake", nil, opts)
-	require.NoError(t, err)
-	require.NoError(t, imp.Ping(ctx))
-	require.NoError(t, imp.Close(ctx))
-
-	imp, err = fakePlugin(t, "importer", integration.ConnectorTypeImporter, "").NewImporter(ctx, "fake", map[string]string{"fail": "close"}, opts)
-	require.NoError(t, err)
-	err = imp.Close(ctx)
-	var closeErr PluginConnCloseError
-	require.ErrorAs(t, err, &closeErr)
-	require.Equal(t, "importer", closeErr.Name)
-}
-
-func TestNewExporter(t *testing.T) {
-	ctx := t.Context()
-	opts := &integration.Options{MaxConcurrency: 1}
-
-	_, err := fakePlugin(t, "exporter", integration.ConnectorTypeImporter, "").NewExporter(ctx, "fake", nil, opts)
-	require.ErrorIs(t, err, ErrPluginTypeMismatch)
-	_, err = fakePlugin(t, "exporter", integration.ConnectorTypeExporter, "/missing").NewExporter(ctx, "fake", nil, opts)
-	require.Error(t, err)
-	_, err = fakePlugin(t, "exporter", integration.ConnectorTypeExporter, "").NewExporter(ctx, "fake", map[string]string{"fail": "init"}, opts)
-	require.Error(t, err)
-
-	exp, err := fakePlugin(t, "exporter", integration.ConnectorTypeExporter, "").NewExporter(ctx, "fake", nil, opts)
-	require.NoError(t, err)
-	require.NoError(t, exp.Ping(ctx))
-	require.NoError(t, exp.Close(ctx))
-
-	exp, err = fakePlugin(t, "exporter", integration.ConnectorTypeExporter, "").NewExporter(ctx, "fake", map[string]string{"fail": "close"}, opts)
-	require.NoError(t, err)
-	require.Error(t, exp.Close(ctx))
-}
-
-func TestNewStorage(t *testing.T) {
-	ctx := t.Context()
-
-	_, err := fakePlugin(t, "storage", integration.ConnectorTypeImporter, "").NewStorage(ctx, "fake", nil)
-	require.ErrorIs(t, err, ErrPluginTypeMismatch)
-	_, err = fakePlugin(t, "storage", integration.ConnectorTypeStorage, "/missing").NewStorage(ctx, "fake", nil)
-	require.Error(t, err)
-	_, err = fakePlugin(t, "storage", integration.ConnectorTypeStorage, "").NewStorage(ctx, "fake", map[string]string{"fail": "init"})
-	require.Error(t, err)
-
-	st, err := fakePlugin(t, "storage", integration.ConnectorTypeStorage, "").NewStorage(ctx, "fake", nil)
-	require.NoError(t, err)
-	require.NoError(t, st.Ping(ctx))
-	require.NoError(t, st.Close(ctx))
-
-	st, err = fakePlugin(t, "storage", integration.ConnectorTypeStorage, "").NewStorage(ctx, "fake", map[string]string{"fail": "close"})
-	require.NoError(t, err)
-	require.Error(t, st.Close(ctx))
-}
-
-func TestNewInventory(t *testing.T) {
-	ctx := t.Context()
-
-	_, err := fakePlugin(t, "inventory", integration.ConnectorTypeImporter, "").NewInventory(ctx, "fake", nil)
-	require.ErrorIs(t, err, ErrPluginTypeMismatch)
-	_, err = fakePlugin(t, "inventory", integration.ConnectorTypeInventory, "/missing").NewInventory(ctx, "fake", nil)
-	require.Error(t, err)
-	_, err = fakePlugin(t, "inventory", integration.ConnectorTypeInventory, "").NewInventory(ctx, "fake", map[string]string{"fail": "init"})
-	require.Error(t, err)
-
-	inv, err := fakePlugin(t, "inventory", integration.ConnectorTypeInventory, "").NewInventory(ctx, "fake", nil)
-	require.NoError(t, err)
-	entries := make(chan *integration.InventoryEntry)
-	go func() {
-		for range entries {
-		}
-	}()
-	require.NoError(t, inv.List(ctx, entries))
-	require.NoError(t, inv.Close(ctx))
-
-	inv, err = fakePlugin(t, "inventory", integration.ConnectorTypeInventory, "").NewInventory(ctx, "fake", map[string]string{"fail": "close"})
-	require.NoError(t, err)
-	require.Error(t, inv.Close(ctx))
 }

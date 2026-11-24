@@ -11,11 +11,11 @@ import (
 )
 
 func mkinventory(ctx *kcontext.KContext, conf *Configuration) (integration.Inventory, error) {
-	p, err := pluginFor(conf, integration.ConnectorTypeInventory)
+	f, err := factoryFor(conf, integration.ConnectorTypeInventory)
 	if err != nil {
 		return nil, err
 	}
-	return p.NewInventory(ctx, protocolOf(conf), conf.params())
+	return f.NewInventory(ctx, conf.params())
 }
 
 // listInventory runs the inventory plugin the source names and streams every
