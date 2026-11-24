@@ -120,7 +120,7 @@ func (cmd *Cached) Close() error {
 func (cmd *Cached) ListenAndServe(ctx *kcontext.KContext) error {
 	lock, err := LockedFile(cmd.socketPath + ".cached-lock")
 	if err != nil {
-		return errors.New("failed to obtain lock")
+		return fmt.Errorf("obtain lock: %w", err)
 	}
 	conn, err := net.Dial("unix", cmd.socketPath)
 	if err == nil {
